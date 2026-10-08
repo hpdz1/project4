@@ -1,6 +1,6 @@
 import type { CarrierId, DetectedTrackingNumber } from "@/lib/types";
 import { carriersMentioned } from "./carriers";
-import { detectAllNormalized, toPublic, type FormatMatch } from "./formats";
+import { CANDIDATE_LENGTHS, detectAllNormalized, toPublic, type FormatMatch } from "./formats";
 import { findLinks, type LinkCandidate } from "./links";
 import { normalizeTrackingNumber } from "./normalize";
 
@@ -264,7 +264,7 @@ function findInText(text: string, hint: CarrierId | null): { pos: number; result
       s += tokens[last].text.toUpperCase();
       if (s.length > MAX_CANDIDATE_LENGTH) break;
       if (joints[last] === "dash") continue; // never end inside a dash compound either
-      if (s.length < 10) continue;
+      if (!CANDIDATE_LENGTHS.has(s.length)) continue;
       const matches = detectAllNormalized(s);
       if (matches.length === 0) continue;
       const result = acceptFromText(matches, text, tokens, first, last, joints, hint);
@@ -280,6 +280,18 @@ function findInText(text: string, hint: CarrierId | null): { pos: number; result
     taken.push(hit);
   }
   return taken.map((t) => ({ pos: tokens[t.first].start, result: t.result }));
+}
+
+/** `text` with every link replaced by spaces of the same length, so offsets still line up. */
+function blankLinks(text: string, links: { start: number; end: number }[]): string {
+  const parts: string[] = [];
+  let at = 0;
+  for (const link of links) {
+    parts.push(text.slice(at, link.start), " ".repeat(link.end - link.start));
+    at = link.end;
+  }
+  parts.push(text.slice(at));
+  return parts.join("");
 }
 
 // ---------------------------------------------------------------------------
@@ -308,12 +320,7 @@ export function findTrackingNumbers(text: string, opts: FindOptions = {}): Detec
     }
   }
 
-  // Scan the text with links blanked out (same length, so offsets still line up).
-  let blanked = clean;
-  for (const link of links) {
-    blanked = blanked.slice(0, link.start) + " ".repeat(link.end - link.start) + blanked.slice(link.end);
-  }
-  for (const { pos, result } of findInText(blanked, hint)) {
+  for (const { pos, result } of findInText(blankLinks(clean, links), hint)) {
     found.push({ pos, seq: seq++, result });
   }
 

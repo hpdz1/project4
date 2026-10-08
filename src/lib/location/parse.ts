@@ -220,8 +220,13 @@ interface Stripped {
  * Remove a leading street line ("123 N Main St Apt 4"), box line ("PO Box 9")
  * or unit ("Suite 200") from one comma-separated part, leaving what follows
  * (usually the city when the user typed no commas).
+ *
+ * Without a house number, a street type only ends the street when
+ * `looseCut` is set (the part runs straight into the state / postcode, as in
+ * "Main Ave Springfield IL"); a part of its own ("Washington Court House, OH")
+ * is taken to be the city.
  */
-function stripStreet(cand: Tok[]): Stripped {
+function stripStreet(cand: Tok[], looseCut = false): Stripped {
   let i = 0;
   let hadStreet = false;
   let poBox = false;
@@ -254,7 +259,7 @@ function stripStreet(cand: Tok[]): Stripped {
       if (u < 0) return { rest: [], hadStreet, poBox };
       i = u;
     }
-  } else {
+  } else if (looseCut) {
     for (let k = 1; k < cand.length - 1; k++) {
       if (isStreetTypeLoose(cand, k)) {
         i = k + 1;
@@ -442,7 +447,8 @@ function localityBefore(toks: Tok[], end: number): Locality | null {
   const prev = end - 1;
   if (prev < 0) return null;
   const cand = toks.slice(segmentStart(toks, prev), end);
-  const stripped = stripStreet(cand);
+  const sharesPartWithAnchor = end < toks.length && toks[end].seg === toks[prev].seg;
+  const stripped = stripStreet(cand, sharesPartWithAnchor);
   return { seg: toks[prev].seg, city: cityText(stripped.rest), hadStreet: stripped.hadStreet, poBox: stripped.poBox };
 }
 

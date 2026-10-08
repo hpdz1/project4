@@ -73,6 +73,8 @@ interface FormatDef {
   evidence: Evidence;
   /** Higher = more specific; breaks ties between formats that both match. */
   rank: number;
+  /** Normalized lengths this format can have (cheap pre-filter before `match`). */
+  lengths: readonly number[];
   /** Returns null when `s` (normalized) does not have this format's shape. */
   match: (s: string) => Shape | null;
 }
@@ -186,6 +188,7 @@ const uspsImpb: FormatDef = {
   carrier: "usps",
   evidence: "distinctive",
   rank: 95,
+  lengths: [22, 26, 30, 34],
   match(s) {
     const hit = bestRouting(
       s,
@@ -202,6 +205,7 @@ const uspsLegacy: FormatDef = {
   carrier: "usps",
   evidence: "distinctive",
   rank: 94,
+  lengths: [22, 28, 30, 32, 34],
   match(s) {
     const hit = bestRouting(
       s,
@@ -218,6 +222,7 @@ const usps20: FormatDef = {
   carrier: "usps",
   evidence: "context",
   rank: 60,
+  lengths: [20],
   match(s) {
     if (!/^[0-9]{20}$/.test(s)) return null;
     return { valid: usps20Valid(s, true), format: "USPS (20 digits)" };
@@ -234,6 +239,7 @@ const FORMATS: readonly FormatDef[] = [
     carrier: "ups",
     evidence: "distinctive",
     rank: 100,
+    lengths: [18],
     match(s) {
       const m = /^1Z([A-Z0-9]{15})([0-9])$/.exec(s);
       if (!m) return null;
@@ -245,6 +251,7 @@ const FORMATS: readonly FormatDef[] = [
     carrier: "ups",
     evidence: "context",
     rank: 60,
+    lengths: [11],
     match(s) {
       const m = /^[AHJKTV]([0-9]{9})([0-9])$/.exec(s);
       if (!m) return null;
@@ -259,6 +266,7 @@ const FORMATS: readonly FormatDef[] = [
     carrier: "usps",
     evidence: "distinctive",
     rank: 90,
+    lengths: [13],
     match(s) {
       const m = /^[A-Z]{2}([0-9]{8})([0-9])([A-Z]{2})$/.exec(s);
       if (!m || !S10_COUNTRIES.has(m[3])) return null;
@@ -270,6 +278,7 @@ const FORMATS: readonly FormatDef[] = [
     carrier: "fedex",
     evidence: "context",
     rank: 50,
+    lengths: [12],
     match(s) {
       if (!/^[0-9]{12}$/.test(s)) return null;
       const [serial, check] = body(s);
@@ -281,6 +290,7 @@ const FORMATS: readonly FormatDef[] = [
     carrier: "fedex",
     evidence: "context",
     rank: 50,
+    lengths: [15],
     match(s) {
       if (!/^[0-9]{15}$/.test(s)) return null;
       const [serial, check] = body(s);
@@ -292,6 +302,7 @@ const FORMATS: readonly FormatDef[] = [
     carrier: "fedex",
     evidence: "distinctive",
     rank: 90,
+    lengths: [22],
     match(s) {
       const m = /^96[0-9]{5}([0-9]{14})([0-9])$/.exec(s);
       if (!m) return null;
@@ -303,6 +314,7 @@ const FORMATS: readonly FormatDef[] = [
     carrier: "fedex",
     evidence: "distinctive",
     rank: 90,
+    lengths: [34],
     match(s) {
       const m = /^96[0-9]{18}([0-9]{13})([0-9])$/.exec(s);
       if (!m) return null;
@@ -315,6 +327,7 @@ const FORMATS: readonly FormatDef[] = [
     evidence: "distinctive",
     // Below USPS: a 34-digit "420..." string can pass both; the USPS reading is preferred.
     rank: 70,
+    lengths: [34],
     match(s) {
       const m = /^[0-8][0-9]{19}([0-9]{13})([0-9])$/.exec(s);
       if (!m) return null;
@@ -326,6 +339,7 @@ const FORMATS: readonly FormatDef[] = [
     carrier: "fedex",
     evidence: "distinctive",
     rank: 85,
+    lengths: [32],
     match(s) {
       const m = /^3[0-9]{15}([0-9]{11})([0-9])[0-9]{4}$/.exec(s);
       if (!m) return null;
@@ -337,6 +351,7 @@ const FORMATS: readonly FormatDef[] = [
     carrier: "fedex",
     evidence: "context",
     rank: 45,
+    lengths: [18],
     match(s) {
       // Per tracking_number_data: the check covers only the 15 digits after the 2-digit container type.
       const m = /^[0-9]{2}([0-9]{15})([0-9])$/.exec(s);
@@ -349,6 +364,7 @@ const FORMATS: readonly FormatDef[] = [
     carrier: "fedex",
     evidence: "context",
     rank: 55,
+    lengths: [20],
     match(s) {
       // FedEx Ground Economy (SmartPost) prints a USPS IMpb without its "92" AI:
       // service code (3) + 9-digit MID starting with 9 + serial (7) + check. The
@@ -364,6 +380,7 @@ const FORMATS: readonly FormatDef[] = [
     carrier: "dhl",
     evidence: "context",
     rank: 40,
+    lengths: [10, 11],
     match(s) {
       const m = /^([0-9]{9,10})([0-9])$/.exec(s);
       if (!m) return null;
@@ -375,6 +392,7 @@ const FORMATS: readonly FormatDef[] = [
     carrier: "dhl",
     evidence: "context",
     rank: 40,
+    lengths: [12, 13, 14],
     match: (s) => (/^J[A-Z]{2,3}[0-9]{9,10}$/.test(s) ? { valid: null, format: "DHL Express piece ID" } : null),
   },
   {
@@ -382,6 +400,7 @@ const FORMATS: readonly FormatDef[] = [
     carrier: "dhl",
     evidence: "context",
     rank: 35,
+    lengths: range(12, 41),
     match: (s) =>
       /^(?:GM|LX|RX|UV|CN|SG|TH|IN|HK|MY)[0-9][0-9A-Z]{9,38}$/.test(s)
         ? { valid: null, format: "DHL eCommerce" }
@@ -392,6 +411,7 @@ const FORMATS: readonly FormatDef[] = [
     carrier: "dhl",
     evidence: "carrier",
     rank: 10,
+    lengths: [14],
     match: (s) => (/^[0-9]{14}$/.test(s) ? { valid: null, format: "DHL eCommerce (14 digits)" } : null),
   },
   {
@@ -399,6 +419,7 @@ const FORMATS: readonly FormatDef[] = [
     carrier: "amazon",
     evidence: "distinctive",
     rank: 90,
+    lengths: [15],
     match: (s) => (/^TB[ACM][0-9]{12}$/.test(s) ? { valid: null, format: "Amazon Logistics (TBA)" } : null),
   },
   {
@@ -406,6 +427,7 @@ const FORMATS: readonly FormatDef[] = [
     carrier: "amazon",
     evidence: "carrier",
     rank: 20,
+    lengths: [11],
     match: (s) => (/^[AFC][0-9]{10}$/.test(s) ? { valid: null, format: "Amazon international" } : null),
   },
   {
@@ -413,6 +435,7 @@ const FORMATS: readonly FormatDef[] = [
     carrier: "ontrac",
     evidence: "distinctive",
     rank: 90,
+    lengths: [15],
     match(s) {
       const m = /^([CD])([0-9]{13})([0-9])$/.exec(s);
       if (!m) return null;
@@ -427,6 +450,7 @@ const FORMATS: readonly FormatDef[] = [
     carrier: "ontrac",
     evidence: "distinctive",
     rank: 80,
+    lengths: [10],
     match: (s) => (/^L[AIEHNX][1-3][0-9]{7}$/.test(s) ? { valid: null, format: "LaserShip L" } : null),
   },
   {
@@ -434,6 +458,7 @@ const FORMATS: readonly FormatDef[] = [
     carrier: "ontrac",
     evidence: "distinctive",
     rank: 85,
+    lengths: [15],
     match: (s) => (/^1LS7[12][0-9]{10}$/.test(s) ? { valid: null, format: "LaserShip 1LS7 (15)" } : null),
   },
   {
@@ -441,6 +466,7 @@ const FORMATS: readonly FormatDef[] = [
     carrier: "ontrac",
     evidence: "distinctive",
     rank: 85,
+    lengths: [17],
     // Printed as 1LS7xxxxxxxxxxxx-1; normalization drops the dash.
     match: (s) => (/^1LS7[12][0-9]{2}01[1-4][0-9]{6}1$/.test(s) ? { valid: null, format: "LaserShip 1LS7 (18)" } : null),
   },
@@ -449,9 +475,17 @@ const FORMATS: readonly FormatDef[] = [
     carrier: "ontrac",
     evidence: "distinctive",
     rank: 85,
+    lengths: [15],
     match: (s) => (/^1LSCX[0-9A-Z]{10}$/.test(s) ? { valid: null, format: "LaserShip 1LSCX" } : null),
   },
 ];
+
+function range(from: number, to: number): number[] {
+  return Array.from({ length: to - from + 1 }, (_, i) => from + i);
+}
+
+/** Every normalized length some format can have. */
+export const CANDIDATE_LENGTHS: ReadonlySet<number> = new Set(FORMATS.flatMap((f) => f.lengths));
 
 function validityScore(valid: boolean | null): number {
   if (valid === true) return 2;
@@ -465,9 +499,10 @@ function validityScore(valid: boolean | null): number {
  * `s` must already be normalized.
  */
 export function detectAllNormalized(s: string): FormatMatch[] {
-  if (s.length < 10 || s.length > 41 || !/^[A-Z0-9]+$/.test(s)) return [];
+  if (!CANDIDATE_LENGTHS.has(s.length) || !/^[A-Z0-9]+$/.test(s)) return [];
   const ranked: { match: FormatMatch; rank: number }[] = [];
   for (const def of FORMATS) {
+    if (!def.lengths.includes(s.length)) continue;
     const shape = def.match(s);
     if (!shape) continue;
     ranked.push({
