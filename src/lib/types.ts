@@ -1,6 +1,8 @@
 /**
  * Shared domain types. Everything that crosses a module boundary
- * (address <-> tracking <-> providers <-> API <-> UI) is defined here.
+ * (tracking <-> ingest <-> store <-> API <-> UI) is defined here.
+ *
+ * See docs/ARCHITECTURE.md for how the pieces fit together.
  */
 
 // ---------------------------------------------------------------------------
@@ -24,191 +26,267 @@ export interface DetectedTrackingNumber {
   format: string;
   /**
    * true  = format has a check digit and it validates
-   * false = format has a check digit and it does NOT validate (likely typo)
-   * null  = format has no check digit (or carrier unknown)
+   * false = format has a check digit and it does NOT validate (likely typo / not a tracking number)
+   * null  = format has no check digit
    */
   checksumValid: boolean | null;
 }
 
 // ---------------------------------------------------------------------------
-// Addresses
+// Shipment status vocabulary
 // ---------------------------------------------------------------------------
 
-/** A US address normalized to USPS Publication 28 conventions (uppercase). */
-export interface NormalizedAddress {
-  /** e.g. "123" (may include fraction or hyphenated ranges such as "12-14"). */
-  houseNumber: string | null;
-  /** Pre-directional, e.g. "N". */
-  preDirectional: string | null;
-  /** Street name without suffix/directionals, e.g. "MAIN". */
-  streetName: string | null;
-  /** Standard suffix abbreviation, e.g. "ST". */
-  suffix: string | null;
-  /** Post-directional, e.g. "NW". */
-  postDirectional: string | null;
-  /** Secondary unit designator, e.g. "APT". */
-  unitType: string | null;
-  /** Secondary unit number, e.g. "4B". */
-  unitNumber: string | null;
-  /** True when the address is a PO Box ("PO BOX 123" lives in streetName). */
-  isPoBox: boolean;
-  city: string | null;
-  /** Two-letter state/territory code. */
-  state: string | null;
-  /** 5-digit ZIP. */
-  zip5: string | null;
-  /** Optional ZIP+4 add-on. */
-  zip4: string | null;
-  /** Canonical single-line rendering, e.g. "123 N MAIN ST APT 4B, SPRINGFIELD, IL 62701". */
-  oneLine: string;
-}
-
-/** Where a carrier says a shipment is going. Carriers often redact the street. */
-export interface ShipmentDestination {
-  street: string | null;
-  city: string | null;
-  state: string | null;
-  postalCode: string | null;
-  country: string | null;
-}
-
-export type MatchLevel =
-  /** Street line and ZIP both match. */
-  | "exact"
-  /** ZIP5 matches (and nothing else conflicts). */
-  | "zip"
-  /** City + state match, carrier gave no ZIP. */
-  | "city"
-  /** Only the state matches; weak signal. */
-  | "state"
-  /** Carrier destination conflicts with the address (different ZIP/state/city). */
-  | "mismatch"
-  /** Carrier did not share any destination information. */
-  | "unknown";
-
-export interface AddressMatch {
-  level: MatchLevel;
-  /** Short human explanation, e.g. "Destination ZIP 62701 matches your address". */
-  reason: string;
-}
-
-// ---------------------------------------------------------------------------
-// Shipments
-// ---------------------------------------------------------------------------
-
-/** Normalized shipment status (mirrors EasyPost's status vocabulary). */
 export type ShipmentStatus =
+  /** Label created / shipper has told the carrier it is coming. */
   | "pre_transit"
   | "in_transit"
   | "out_for_delivery"
   | "available_for_pickup"
   | "delivered"
+  /** Delay, exception, failed attempt. */
+  | "exception"
   | "return_to_sender"
-  | "failure"
-  | "cancelled"
   | "unknown";
 
-export interface TrackingEvent {
-  /** ISO-8601 timestamp. */
-  occurredAt: string;
-  status: ShipmentStatus;
-  message: string;
-  location: string | null;
+// ---------------------------------------------------------------------------
+// Email ingest
+// ---------------------------------------------------------------------------
+
+/** Which kind of email a shipment update was read from. */
+export type SourceKind =
+  | "usps_digest" // USPS Informed Delivery Daily Digest
+  | "usps_alert" // USPS per-package email (Informed Delivery / USPS tracking notification)
+  | "ups" // UPS My Choice / UPS Update emails
+  | "fedex" // FedEx Delivery Manager / FedEx tracking emails
+  | "amazon" // Amazon shipment notifications
+  | "dhl" // DHL Express / On Demand Delivery
+  | "generic"; // any other email that contained a recognizable tracking number
+
+/** A provider-neutral inbound email, after webhook payload normalization. */
+export interface InboundEmail {
+  /** All envelope / header recipients we know of (To, Cc, Delivered-To, X-Forwarded-To, OriginalRecipient...). Lowercased addresses. */
+  recipients: string[];
+  /** Lowercased address of the From header as received (for auto-forwarded mail this is usually the original sender). */
+  from: string;
+  /** Display name of the From header, if any. */
+  fromName: string | null;
+  subject: string;
+  /** Plain-text body (may be empty if only HTML was sent). */
+  text: string;
+  /** HTML body (may be empty). */
+  html: string;
+  /** Header name (lowercased) -> value. Repeated headers joined with "\n". */
+  headers: Record<string, string>;
+  /** ISO-8601 time the email was sent (Date header) or received. */
+  date: string;
 }
 
-export interface Shipment {
-  trackingNumber: string;
+/** One fact about one shipment, as read from one email. */
+export interface ShipmentUpdate {
   carrier: CarrierId;
-  status: ShipmentStatus;
-  /** Carrier's own wording for the latest status, if any. */
-  statusDetail: string | null;
-  /** ISO-8601 estimated delivery date/time, if known. */
-  estimatedDelivery: string | null;
-  /** ISO-8601 actual delivery time, if delivered. */
+  /** Carrier tracking number, normalized (uppercase, no spaces). */
+  trackingNumber: string | null;
+  /** Retailer order reference when there is no tracking number (e.g. Amazon order 113-1234567-1234567). */
+  orderRef: string | null;
+  /** Who sent the package, e.g. "ACME OUTDOOR CO" (USPS digest "From:" line, UPS "Shipper"). */
+  shipper: string | null;
+  /** Item description when known (e.g. Amazon item title). */
+  description: string | null;
+  /** null = this email didn't say. */
+  status: ShipmentStatus | null;
+  /** Expected delivery date as YYYY-MM-DD (calendar date at the delivery address). */
+  expectedDelivery: string | null;
+  /** Free-text delivery window, e.g. "2:15 PM - 6:15 PM". */
+  expectedWindow: string | null;
+  /** ISO-8601 delivery time when the email reports a delivery. */
   deliveredAt: string | null;
-  destination: ShipmentDestination | null;
-  /** Newest first. */
-  events: TrackingEvent[];
-  /** Public carrier tracking page. */
-  trackingUrl: string | null;
-  /** Which provider produced this data ("mock", "easypost", ...). */
-  source: string;
-}
-
-// ---------------------------------------------------------------------------
-// The "check my address" API contract (POST /api/check)
-// ---------------------------------------------------------------------------
-
-export interface CheckRequestItem {
-  trackingNumber: string;
-  /** Optional carrier override; otherwise auto-detected. */
-  carrier?: CarrierId;
-  /** Optional user label, e.g. "New running shoes". */
-  label?: string;
-}
-
-export interface CheckRequest {
-  /** Free-form single-line US address as typed by the user. */
-  address: string;
-  items: CheckRequestItem[];
+  /** ISO-8601 time of this fact (the email's date). */
+  eventAt: string;
+  source: SourceKind;
 }
 
 /**
- * How a shipment relates to the user's address *right now*:
- *  - arriving_today:   out for delivery / estimated today, destination matches
- *  - on_the_way:       in transit or pre-transit, destination matches
- *  - delivered:        delivered recently, destination matches
- *  - possibly_yours:   active, but destination is unknown or only weakly matches (state)
- *  - elsewhere:        destination conflicts with the address
- *  - needs_attention:  failure / returned / cancelled / pickup needed (matching or unknown destination)
- *  - not_found:        provider could not find this tracking number
+ * Email providers make you confirm a forwarding address by sending a code
+ * to it. We surface that code to the user in the setup wizard.
  */
-export type ShipmentVerdict =
-  | "arriving_today"
-  | "on_the_way"
-  | "delivered"
-  | "possibly_yours"
-  | "elsewhere"
-  | "needs_attention"
-  | "not_found";
-
-export interface CheckResultItem {
-  trackingNumber: string;
-  carrier: CarrierId;
-  label: string | null;
-  verdict: ShipmentVerdict;
-  match: AddressMatch;
-  shipment: Shipment | null;
-  /** Present when tracking failed (network, invalid number, provider error). */
-  error: { code: string; message: string } | null;
+export interface ForwardingVerification {
+  provider: "gmail" | "yahoo" | "icloud" | "outlook" | "other";
+  /** The mailbox that asked to forward to us, if we could read it. */
+  requestedBy: string | null;
+  code: string | null;
+  /** Confirmation link, only if it points at the provider's own domain. */
+  link: string | null;
+  /** ISO-8601. */
+  receivedAt: string;
 }
 
-export interface CheckSummary {
-  arrivingToday: number;
-  onTheWay: number;
-  delivered: number;
-  possiblyYours: number;
-  elsewhere: number;
-  needsAttention: number;
-  notFound: number;
-  /** One-sentence headline for the UI, e.g. "2 packages are on the way to you". */
+export interface ParsedEmail {
+  /** What we recognized the email as. */
+  kind: SourceKind | "forwarding_verification" | "ignored";
+  updates: ShipmentUpdate[];
+  verification: ForwardingVerification | null;
+  /** Short machine-friendly note, e.g. "no tracking numbers found". */
+  note: string | null;
+}
+
+// ---------------------------------------------------------------------------
+// Carrier programs ("turn these on once")
+// ---------------------------------------------------------------------------
+
+export type ProgramId =
+  | "usps_informed_delivery"
+  | "ups_my_choice"
+  | "fedex_delivery_manager"
+  | "amazon_orders"
+  | "dhl_on_demand"
+  | "ontrac_notifyme"
+  | "canada_post_auto_tracking"
+  | "royal_mail_app"
+  | "evri_app"
+  | "dpd_uk_app"
+  | "postnl_account"
+  | "dhl_paket_de"
+  | "australia_post_mypost";
+
+export type ProgramState = "done" | "skipped";
+
+// ---------------------------------------------------------------------------
+// Accounts
+// ---------------------------------------------------------------------------
+
+/** Public view of an account (never includes the secret key or its hash). */
+export interface AccountView {
+  id: string;
+  /** Full inbound address users forward carrier emails to, e.g. "r-k3j9x2m4q8w1@in.example.com". */
+  inboundAddress: string;
+  /** ISO 3166-1 alpha-2, e.g. "US". */
+  country: string;
+  /** ZIP / postcode, if the user gave one. We never store the street address. */
+  postalCode: string | null;
+  /** State / province code, e.g. "CA". */
+  region: string | null;
+  /** IANA time zone used to decide what "today" means, e.g. "America/Chicago". */
+  timezone: string;
+  programs: Partial<Record<ProgramId, ProgramState>>;
+  createdAt: string;
+}
+
+// ---------------------------------------------------------------------------
+// Stored shipments & the dashboard
+// ---------------------------------------------------------------------------
+
+export interface StoredShipment {
+  id: string;
+  carrier: CarrierId;
+  trackingNumber: string | null;
+  orderRef: string | null;
+  shipper: string | null;
+  description: string | null;
+  status: ShipmentStatus;
+  expectedDelivery: string | null;
+  expectedWindow: string | null;
+  deliveredAt: string | null;
+  /** ISO-8601. */
+  firstSeenAt: string;
+  /** ISO-8601 time of the newest fact we have. */
+  lastEventAt: string;
+  /** Source of the newest fact. */
+  source: SourceKind;
+  /** User said "not mine / hide". */
+  hidden: boolean;
+  /** User marked it as received. */
+  userMarkedDelivered: boolean;
+}
+
+export type DashboardGroup =
+  | "arriving_today"
+  | "on_the_way"
+  | "needs_attention"
+  | "delivered_recently";
+
+export interface DashboardShipment extends StoredShipment {
+  group: DashboardGroup;
+  /** Official carrier tracking page, if we can build one. */
+  trackingUrl: string | null;
+  /** One short human line, e.g. "Expected Tue, Oct 13" or "Delivered yesterday". */
   headline: string;
 }
 
-export interface CheckResponse {
-  address: NormalizedAddress;
-  /** How the address was standardized: "census" (validated online) or "local" (parsed offline). */
-  addressSource: "census" | "local";
-  /** Non-fatal notes about the address, e.g. "No ZIP code given; matching may be less precise". */
-  addressWarnings: string[];
-  /** "demo" when running on simulated data, "live" with a real provider. */
-  mode: "demo" | "live";
-  results: CheckResultItem[];
-  summary: CheckSummary;
-  /** ISO-8601 time the check was performed. */
-  checkedAt: string;
+export interface FeedHealth {
+  source: SourceKind;
+  /** ISO-8601, null if we've never received this kind of email. */
+  lastSeenAt: string | null;
+  state: "ok" | "quiet" | "never";
+  /** Human hint, e.g. "No Informed Delivery digest in 5 days — is your forwarding filter on?" */
+  hint: string | null;
+}
+
+export interface DashboardResponse {
+  account: AccountView;
+  /** Big answer for the top of the page. */
+  answer: {
+    anythingComing: boolean;
+    /** e.g. "Yes — 3 packages are on the way (1 arriving today)." */
+    headline: string;
+    arrivingToday: number;
+    onTheWay: number;
+    needsAttention: number;
+    deliveredRecently: number;
+  };
+  shipments: DashboardShipment[];
+  feeds: FeedHealth[];
+  /** Pending forwarding confirmations (Gmail codes etc.) received in the last 48h. */
+  verifications: ForwardingVerification[];
+  /** Number of carrier emails received so far. */
+  emailsReceived: number;
+  /** ISO-8601 time of the newest email received, if any. */
+  lastEmailAt: string | null;
+  /** ISO-8601 server time the response was built. */
+  generatedAt: string;
+  /** True when DEMO_MODE is on (sample-email seeding is available). */
+  demoMode: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// HTTP API payloads (see docs/ARCHITECTURE.md "HTTP API")
+// ---------------------------------------------------------------------------
+
+/** GET/PATCH /api/account, POST /api/session */
+export interface AccountResponse {
+  account: AccountView;
+  demoMode: boolean;
+}
+
+/** POST /api/account (201) and POST /api/account/key */
+export interface AccountCreatedResponse extends AccountResponse {
+  /** The secret sign-in key. Shown once; the server only keeps a hash. */
+  accountKey: string;
+}
+
+/** POST /api/account */
+export interface CreateAccountRequest {
+  country: string;
+  postalCode?: string | null;
+  region?: string | null;
+  /** IANA time zone from the browser (Intl.DateTimeFormat().resolvedOptions().timeZone). */
+  timezone?: string;
+}
+
+/** PATCH /api/account. `null` for a program clears its state. */
+export interface UpdateAccountRequest {
+  country?: string;
+  postalCode?: string | null;
+  region?: string | null;
+  timezone?: string;
+  programs?: Partial<Record<ProgramId, ProgramState | null>>;
+}
+
+/** PATCH /api/shipments/[id] */
+export interface UpdateShipmentRequest {
+  hidden?: boolean;
+  delivered?: boolean;
 }
 
 export interface ApiError {
-  error: { code: string; message: string; details?: unknown };
+  error: { code: string; message: string };
 }
