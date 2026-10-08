@@ -1,26 +1,275 @@
 @import "tailwindcss";
 
+/*
+ * Package Radar design tokens.
+ * Use them through Tailwind (bg-surface, text-muted, border-border,
+ * bg-accent text-accent-contrast, bg-success-soft text-success, …) or as
+ * CSS variables (var(--accent)).
+ */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  color-scheme: light;
+  --bg: #f6f8fb;
+  --surface: #ffffff;
+  --subtle: #eef2f6;
+  --text: #0f1b2d;
+  --muted: #4a5a70;
+  --border: #dbe2ea;
+  --border-strong: #8592a3;
+  --accent: #0e7490;
+  --accent-hover: #155e75;
+  --accent-contrast: #ffffff;
+  --accent-soft: #e0f3f7;
+  --success: #166534;
+  --success-soft: #e6f6ec;
+  --warning: #b45309;
+  --warning-soft: #fdf3e1;
+  --danger: #b91c1c;
+  --danger-hover: #991b1b;
+  --danger-contrast: #ffffff;
+  --danger-soft: #fdecec;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    color-scheme: dark;
+    --bg: #0b1220;
+    --surface: #111a2b;
+    --subtle: #18233a;
+    --text: #e6edf6;
+    --muted: #9fb0c6;
+    --border: #23314a;
+    --border-strong: #5b6b85;
+    --accent: #22d3ee;
+    --accent-hover: #67e8f9;
+    --accent-contrast: #062a33;
+    --accent-soft: #0c3440;
+    --success: #4ade80;
+    --success-soft: #0f2f1e;
+    --warning: #fbbf24;
+    --warning-soft: #33260b;
+    --danger: #f87171;
+    --danger-hover: #fca5a5;
+    --danger-contrast: #2a0a0a;
+    --danger-soft: #3a1515;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@theme inline {
+  --color-bg: var(--bg);
+  --color-background: var(--bg);
+  --color-surface: var(--surface);
+  --color-subtle: var(--subtle);
+  --color-text: var(--text);
+  --color-foreground: var(--text);
+  --color-muted: var(--muted);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-contrast: var(--accent-contrast);
+  --color-accent-soft: var(--accent-soft);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-danger: var(--danger);
+  --color-danger-hover: var(--danger-hover);
+  --color-danger-contrast: var(--danger-contrast);
+  --color-danger-soft: var(--danger-soft);
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, monospace;
+}
+
+@layer base {
+  *,
+  ::before,
+  ::after {
+    border-color: var(--border);
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-sans);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background: var(--accent-soft);
+    color: var(--text);
+  }
+}
+
+/*
+ * Long-form content (guides, legal pages). Wrap the content in
+ * <div className="article"> or <article className="article">.
+ */
+@layer components {
+  .article {
+    max-width: 68ch;
+    font-size: 1.0625rem;
+    line-height: 1.75;
+    color: var(--text);
+    overflow-wrap: break-word;
+  }
+
+  .article > * + * {
+    margin-top: 1.25em;
+  }
+
+  .article > :first-child {
+    margin-top: 0;
+  }
+
+  .article h2 {
+    margin-top: 2.25em;
+    font-size: 1.5rem;
+    line-height: 1.3;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    scroll-margin-top: 1.5rem;
+  }
+
+  .article h3 {
+    margin-top: 1.75em;
+    font-size: 1.2rem;
+    line-height: 1.4;
+    font-weight: 600;
+    scroll-margin-top: 1.5rem;
+  }
+
+  .article h4 {
+    margin-top: 1.5em;
+    font-size: 1.05rem;
+    font-weight: 600;
+  }
+
+  .article h2 + *,
+  .article h3 + *,
+  .article h4 + * {
+    margin-top: 0.75em;
+  }
+
+  .article ul,
+  .article ol {
+    padding-left: 1.5em;
+  }
+
+  .article ul {
+    list-style: disc;
+  }
+
+  .article ol {
+    list-style: decimal;
+  }
+
+  .article li + li,
+  .article li > ul,
+  .article li > ol {
+    margin-top: 0.4em;
+  }
+
+  .article li::marker {
+    color: var(--muted);
+  }
+
+  .article a {
+    color: var(--accent);
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 3px;
+  }
+
+  .article a:hover {
+    text-decoration-thickness: 2px;
+  }
+
+  .article strong {
+    font-weight: 600;
+  }
+
+  .article blockquote {
+    border-left: 4px solid var(--accent);
+    padding: 0.25em 0 0.25em 1em;
+    color: var(--muted);
+  }
+
+  .article code,
+  .article kbd {
+    font-family: var(--font-mono);
+    font-size: 0.875em;
+    background: var(--subtle);
+    border: 1px solid var(--border);
+    border-radius: 0.375rem;
+    padding: 0.1em 0.35em;
+  }
+
+  .article pre {
+    overflow-x: auto;
+    background: var(--subtle);
+    border: 1px solid var(--border);
+    border-radius: 0.75rem;
+    padding: 1em;
+    font-size: 0.9em;
+    line-height: 1.6;
+  }
+
+  .article pre code {
+    background: none;
+    border: 0;
+    padding: 0;
+    font-size: inherit;
+  }
+
+  .article table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.95em;
+    line-height: 1.5;
+  }
+
+  .article th,
+  .article td {
+    border-bottom: 1px solid var(--border);
+    padding: 0.6em 0.75em;
+    text-align: left;
+    vertical-align: top;
+  }
+
+  .article th {
+    background: var(--subtle);
+    font-weight: 600;
+  }
+
+  /* Optional wrapper for wide tables: <div className="table-scroll"><table>… */
+  .article .table-scroll {
+    overflow-x: auto;
+  }
+
+  .article hr {
+    border: 0;
+    border-top: 1px solid var(--border);
+    margin: 2.5em 0;
+  }
+
+  .article img,
+  .article video {
+    max-width: 100%;
+    height: auto;
+    border-radius: 0.75rem;
+  }
+
+  .article figcaption {
+    margin-top: 0.5em;
+    font-size: 0.875em;
+    color: var(--muted);
+  }
 }

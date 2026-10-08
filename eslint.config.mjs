@@ -12,6 +12,11 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Playwright output (HTML report bundles, traces).
+    "playwright-report/**",
+    "test-results/**",
+    // Optional Cloudflare Email Worker: plain JS for wrangler, with its own package.json.
+    "workers/**",
   ]),
 ]);
 

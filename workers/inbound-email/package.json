@@ -1,0 +1,14 @@
+{
+  "name": "package-radar-inbound-email",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Optional Cloudflare Email Worker that forwards inbound mail to Package Radar's /api/inbound/raw",
+  "scripts": {
+    "dev": "npx wrangler dev",
+    "deploy": "npx wrangler deploy"
+  },
+  "dependencies": {
+    "postal-mime": "4.0.5"
+  }
+}

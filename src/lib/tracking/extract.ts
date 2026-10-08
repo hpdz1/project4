@@ -26,7 +26,7 @@ const INVISIBLE_RE = /[\u200B-\u200D\u2060\uFEFF\u00AD]/g;
 const NBSP_ENTITY_RE = /&(?:nbsp|#160|#xa0);/gi;
 
 const CONTEXT_CHARS = 60;
-const MAX_CANDIDATE_LENGTH = 40;
+const MAX_CANDIDATE_LENGTH = Math.max(...CANDIDATE_LENGTHS);
 
 /** Labels that introduce a tracking number. */
 const POSITIVE_RE = /\b(?:track|tracking|tracked|waybill|awb|shipment|shipments|consignment)\b/gi;

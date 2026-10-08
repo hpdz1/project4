@@ -46,3 +46,11 @@ next-env.d.ts
 
 # allow committing the example env file
 !.env.example
+
+# local SQLite databases (default DATABASE_PATH and the e2e database)
+/.data/
+
+# optional Cloudflare Email Worker, when run locally
+/workers/inbound-email/node_modules/
+/workers/inbound-email/wrangler.toml
+/workers/inbound-email/.dev.vars

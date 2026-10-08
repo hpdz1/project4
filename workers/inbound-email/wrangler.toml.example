@@ -1,0 +1,17 @@
+# Copy to wrangler.toml and edit. See README.md.
+name = "package-radar-inbound"
+main = "worker.js"
+compatibility_date = "2026-09-15"
+
+[observability]
+enabled = true
+
+[vars]
+# Base URL of your Package Radar deployment (no trailing slash).
+PACKAGE_RADAR_URL = "https://packageradar.example.com"
+# Optional: largest raw message (bytes) the worker will process. Bigger ones are dropped.
+# MAX_RAW_BYTES = "10485760"
+
+# The shared secret is NOT set here. Store it as an encrypted secret; it must
+# equal INBOUND_SECRET in the app's environment:
+#   npx wrangler secret put INBOUND_SECRET

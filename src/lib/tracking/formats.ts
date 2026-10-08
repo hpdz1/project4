@@ -110,9 +110,10 @@ function body(s: string): [serial: string, check: string] {
 // ---------------------------------------------------------------------------
 
 /**
- * Ways to read `s` as [optional 420 + ZIP routing prefix] + PIC. A PIC always
- * starts with 9 (or is a bare 20-digit legacy number), so a leading "420" is
- * always routing. Order mirrors the reference regex (ZIP+4 tried first).
+ * Ways to read `s` as [optional 420 + ZIP routing prefix] + PIC. IMpb and
+ * 22-digit legacy PICs start with 9, so a leading "420" means routing (bare
+ * 20-digit numbers are handled by `usps_20`). ZIP+4 is tried first, like the
+ * reference regex, but both readings are checked.
  */
 function uspsRoutings(s: string): { pic: string; zipLen: 0 | 5 | 9 }[] {
   if (!/^[0-9]+$/.test(s)) return [];
