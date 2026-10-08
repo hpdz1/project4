@@ -42,7 +42,7 @@ export function weightedMod11CheckDigit(serial: string, weights: readonly number
   return (sum % 11) % 10;
 }
 
-/** DHL Express: the serial read as a decimal number, mod 7 (check digit is 0–6). */
+/** DHL Express: the serial read as a decimal number, mod 7 (check digit is 0-6). */
 export function mod7CheckDigit(serial: string): number {
   let r = 0;
   for (let i = 0; i < serial.length; i++) r = (r * 10 + charValue(serial[i])) % 7;

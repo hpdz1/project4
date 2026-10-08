@@ -27,6 +27,15 @@ describe("parseLocation: US full addresses", () => {
     ["742 Evergreen Terrace, Springfield, OR 97477", "97477", "OR", "Springfield"],
     ["10 County Rd 12 Lake Placid NY 12946", "12946", "NY", "Lake Placid"],
     ["2200 W Virginia Ave, Charleston, West Virginia 25302", "25302", "WV", "Charleston"],
+    ["123 Main St Virginia Beach VA 23451", "23451", "VA", "Virginia Beach"],
+    ["123 Main St Key West FL 33040", "33040", "FL", "Key West"],
+    ["1 W Main St North Bergen NJ 07047", "07047", "NJ", "North Bergen"],
+    ["123 Main Street Apt 2 New York NY 10001", "10001", "NY", "New York"],
+    ["Main Ave Springfield IL 62701", "62701", "IL", "Springfield"],
+    ["One Apple Park Way, Cupertino, CA 95014", "95014", "CA", "Cupertino"],
+    ["12 1/2 Main St, Bangor, ME 04401", "04401", "ME", "Bangor"],
+    ["W1234N5678 Main St, Cedarburg, WI 53012", "53012", "WI", "Cedarburg"],
+    ["123-45 Queens Blvd, Forest Hills, NY 11375", "11375", "NY", "Forest Hills"],
   ])("%s", (input, postalCode, region, city) => {
     const parsed = parseLocation(input);
     expect(parsed).toEqual({ country: "US", postalCode, region, city, hasStreet: true, warnings: [] });
@@ -99,6 +108,17 @@ describe("parseLocation: US partial input", () => {
     });
     expect(parseLocation("Fort Lee NJ 07024")).toMatchObject({ region: "NJ", city: "Fort Lee", hasStreet: false });
     expect(parseLocation("Kansas City, MO 64105")).toMatchObject({ region: "MO", city: "Kansas City" });
+    expect(parseLocation("Kansas City, Kansas 66101")).toMatchObject({ region: "KS", city: "Kansas City" });
+    expect(parseLocation("Indiana, PA 15701")).toMatchObject({ region: "PA", city: "Indiana" });
+  });
+
+  it("keeps city names that contain street words when they have their own comma part", () => {
+    expect(parseLocation("Washington Court House, OH 43160")).toMatchObject({
+      region: "OH",
+      city: "Washington Court House",
+      hasStreet: false,
+    });
+    expect(parseLocation("Pacific Grove CA 93950")).toMatchObject({ city: "Pacific Grove", hasStreet: false });
   });
 
   it("only flags a street when there is one", () => {
@@ -129,6 +149,17 @@ describe("parseLocation: PO Boxes, units, military, territories", () => {
     const parsed = parseLocation(input);
     expect(parsed).toMatchObject({ postalCode: "62701", region: "IL", city: "Springfield", hasStreet: false });
     expect(parsed.warnings).toEqual([expect.stringContaining("PO Box")]);
+  });
+
+  it("reads rural route addresses without a PO Box warning", () => {
+    expect(parseLocation("RR 2 Box 152, Hamlet, NC 28345")).toEqual({
+      country: "US",
+      postalCode: "28345",
+      region: "NC",
+      city: "Hamlet",
+      hasStreet: false,
+      warnings: [],
+    });
   });
 
   it("does not take a PO Box number for a ZIP", () => {
@@ -183,6 +214,12 @@ describe("parseLocation: other countries", () => {
       city: "Victoria",
     });
     expect(parseLocation("Iqaluit NU X0A 0H0")).toMatchObject({ region: "NU", postalCode: "X0A 0H0" });
+    expect(parseLocation("Montréal (Québec) H2X 1Y4")).toMatchObject({
+      country: "CA",
+      region: "QC",
+      city: "Montréal",
+      postalCode: "H2X 1Y4",
+    });
   });
 
   it("detects UK postcodes", () => {
@@ -280,6 +317,19 @@ describe("parseLocation: other countries", () => {
       warnings: [],
     });
     expect(parseLocation("anything", OTHER_COUNTRY_CODE)).toMatchObject({ country: "ZZ", warnings: [] });
+    expect(parseLocation("10 Rue de Rivoli, 75001 Paris, France")).toEqual({
+      country: "FR",
+      postalCode: null,
+      region: null,
+      city: null,
+      hasStreet: true,
+      warnings: [],
+    });
+    // Only countries in the picker are suggested.
+    expect(parseLocation("10 Rue de Rivoli, 75001 Paris, France", "US").warnings).toEqual([
+      expect.stringContaining(NO_ZIP),
+    ]);
+    expect(parseLocation("Belfast BT1 1AA, Northern Ireland")).toMatchObject({ country: "GB", postalCode: "BT1 1AA" });
   });
 });
 

@@ -1,4 +1,4 @@
-import { countryName, normalizeCountryCode } from "./countries";
+import { SUPPORTED_COUNTRY_CODES, countryName, normalizeCountryCode } from "./countries";
 import {
   AU_LOOKUP,
   CA_LOOKUP,
@@ -467,7 +467,11 @@ function localityAfter(toks: Tok[], span: Span): string | null {
 // Countries
 // ---------------------------------------------------------------------------
 
-/** Country names typed at the end of an address. Ambiguous ones (CA, DE, NL, Wales, Holland) are left out. */
+/**
+ * Country names typed at the end of an address. Ambiguous ones are left out:
+ * CA/DE/NL are also state or province codes, "Wales" ends "New South Wales",
+ * "Mexico" ends "New Mexico", and Holland / Georgia / Jersey are US places.
+ */
 const COUNTRY_ALIASES: ReadonlyMap<string, string> = new Map([
   ["US", "US"],
   ["USA", "US"],
@@ -489,6 +493,22 @@ const COUNTRY_ALIASES: ReadonlyMap<string, string> = new Map([
   ["GERMANY", "DE"],
   ["DEUTSCHLAND", "DE"],
   ["AUSTRALIA", "AU"],
+  // Countries without program data: recognized so we don't misread their postcodes as US ZIPs.
+  ["FRANCE", "FR"],
+  ["SPAIN", "ES"],
+  ["ITALY", "IT"],
+  ["IRELAND", "IE"],
+  ["NEW ZEALAND", "NZ"],
+  ["BELGIUM", "BE"],
+  ["SWITZERLAND", "CH"],
+  ["AUSTRIA", "AT"],
+  ["SWEDEN", "SE"],
+  ["NORWAY", "NO"],
+  ["DENMARK", "DK"],
+  ["POLAND", "PL"],
+  ["PORTUGAL", "PT"],
+  ["JAPAN", "JP"],
+  ["SINGAPORE", "SG"],
 ]);
 
 /** Remove a trailing country name; returns its code. */
@@ -731,7 +751,7 @@ export function parseLocation(input: string, countryHint?: string): ParsedLocati
 
   const parsed = parseFor(country, toks);
   const warnings = [...parsed.warnings];
-  if (detected && detected !== country) {
+  if (detected && detected !== country && SUPPORTED_COUNTRY_CODES.has(detected)) {
     const name = countryName(detected) ?? detected;
     warnings.push(`This looks like an address in ${name}. Choose ${name} as your country if that's right.`);
   }

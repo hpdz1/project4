@@ -138,8 +138,22 @@ describe("links that are not tracking links", () => {
     expect(findTrackingNumbers("https://www.fedex.com/fedextrack/?trknbr=986578788856")).toEqual([]);
   });
 
-  it("does not trust a generic ?number= on a non-carrier host", () => {
+  it("does not trust generic parameter names (?number=, ?trackingId=) on non-carrier hosts", () => {
     expect(findTrackingNumbers("https://shop.example.com/track?number=ZX12345678AB")).toEqual([]);
+    expect(findTrackingNumbers("https://links.example.com/click?trackingId=123456789012&u=1")).toEqual([]);
+    expect(findTrackingNumbers("https://links.example.com/open?tracking_id=ZX98765432AB")).toEqual([]);
+  });
+
+  it("trusts them on a carrier's own host", () => {
+    expect(numbers("https://www.dhl.com/us-en/home/tracking.html?trackingId=3318810025")).toEqual(["dhl:3318810025"]);
+    expect(findTrackingNumbers("https://www.ontrac.com/tracking/?number=ZX12345678AB")).toEqual([
+      {
+        trackingNumber: "ZX12345678AB",
+        carrier: "ontrac",
+        format: "Unrecognized format (from a tracking link)",
+        checksumValid: null,
+      },
+    ]);
   });
 });
 

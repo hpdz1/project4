@@ -3,7 +3,7 @@
  * NBSP and thin spaces), ASCII and Unicode dashes, dots, and the invisible
  * characters email templates insert to stop phone-number auto-linking.
  */
-const STRIP_RE = /[\s.\-‐-―−​-‍⁠﻿­]+/g;
+const STRIP_RE = /[\s.\-\u2010-\u2015\u2212\u200B-\u200D\u2060\uFEFF\u00AD]+/g;
 
 /**
  * Canonical form of a tracking number as typed or printed: uppercase, with

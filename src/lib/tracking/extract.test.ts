@@ -19,8 +19,8 @@ describe("grouped and formatted numbers", () => {
   it.each([
     "USPS Tracking®: 9400 1118 9922 3197 4284 97",
     "USPS Tracking®: 9400-1118-9922-3197-4284-97",
-    "USPS Tracking®: 9400 1118 9922 3197 4284 97",
-    "USPS Tracking®: 9400​1118​9922​3197​4284​97",
+    "USPS Tracking®: 9400\u00A01118\u00A09922\u00A03197\u00A04284\u00A097",
+    "USPS Tracking®: 9400\u200B1118\u200B9922\u200B3197\u200B4284\u200B97",
     "USPS Tracking®: 9400&nbsp;1118&nbsp;9922&nbsp;3197&nbsp;4284&nbsp;97",
     "USPS Tracking®: 9400111899223197428497",
   ])("USPS grouped digits: %j", (text) => {
@@ -188,6 +188,45 @@ describe("phone numbers never match", () => {
 
   it("rejects an international phone number that passes FedEx 12", () => {
     expect(numbers("FedEx UK tracking support +44 20 7946 0008", "fedex")).toEqual([]);
+  });
+});
+
+describe("randomized false-positive checks", () => {
+  // Deterministic LCG so failures are reproducible.
+  function rng(seed: number) {
+    let x = seed;
+    return (n: number) => {
+      x = (x * 1103515245 + 12345) % 2147483648;
+      return x % n;
+    };
+  }
+  const digits = (next: (n: number) => number, len: number) =>
+    Array.from({ length: len }, (_, i) => String(i === 0 ? 1 + next(9) : next(10))).join("");
+
+  it("numbers behind order/invoice/SKU/phone labels never match, even right after a tracking keyword", () => {
+    const next = rng(42);
+    const labels = [
+      "Order #", "Order number:", "Invoice", "SKU", "Item #", "Account", "Ref:", "Card", "Call", "Phone:",
+      "Gift card", "Case #", "Claim number", "RMA", "Promo code",
+    ];
+    const hints = ["fedex", "dhl", "usps", "ups"] as const;
+    for (let i = 0; i < 600; i++) {
+      const label = labels[next(labels.length)];
+      const n = digits(next, 10 + next(11)); // 10..20 digits
+      const text = `Track your shipment with FedEx or DHL. ${label} ${n}`;
+      expect(findTrackingNumbers(text, { carrierHint: hints[next(hints.length)] }), text).toEqual([]);
+    }
+  });
+
+  it("formatted phone numbers never match", () => {
+    const next = rng(7);
+    for (let i = 0; i < 600; i++) {
+      const a = digits(next, 3), b = digits(next, 3), c = digits(next, 4);
+      const shapes = [`(${a}) ${b}-${c}`, `${a}-${b}-${c}`, `1-${a}-${b}-${c}`, `+1 ${a} ${b} ${c}`, `${a}.${b}.${c}`, `${a} ${b} ${c}`];
+      const phone = shapes[next(shapes.length)];
+      const text = `DHL Express shipment tracking help: ${phone}`;
+      expect(findTrackingNumbers(text, { carrierHint: "dhl" }), text).toEqual([]);
+    }
   });
 });
 

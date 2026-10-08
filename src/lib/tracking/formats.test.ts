@@ -11,11 +11,11 @@ import { normalizeTrackingNumber } from "./normalize";
 describe("normalizeTrackingNumber", () => {
   it("uppercases and strips whitespace, dashes and dots", () => {
     expect(normalizeTrackingNumber(" 1z 5r8-939.03 ")).toBe("1Z5R893903");
-    expect(normalizeTrackingNumber("9400 1118–9922 3197\t4284 97")).toBe("9400111899223197428497");
+    expect(normalizeTrackingNumber("9400\u00A01118\u20139922 3197\t4284 97")).toBe("9400111899223197428497");
   });
 
   it("strips zero-width characters that templates insert", () => {
-    expect(normalizeTrackingNumber("9400​1118‍9922")).toBe("940011189922");
+    expect(normalizeTrackingNumber("9400\u200B1118\u200D9922")).toBe("940011189922");
   });
 });
 

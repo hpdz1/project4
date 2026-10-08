@@ -22,7 +22,7 @@ export interface FindOptions {
 }
 
 /** Characters templates insert to break auto-linking; removed before scanning. */
-const INVISIBLE_RE = /[​-‍⁠﻿­]/g;
+const INVISIBLE_RE = /[\u200B-\u200D\u2060\uFEFF\u00AD]/g;
 const NBSP_ENTITY_RE = /&(?:nbsp|#160|#xa0);/gi;
 
 const CONTEXT_CHARS = 60;
@@ -31,8 +31,17 @@ const MAX_CANDIDATE_LENGTH = 40;
 /** Labels that introduce a tracking number. */
 const POSITIVE_RE = /\b(?:track|tracking|tracked|waybill|awb|shipment|shipments|consignment)\b/gi;
 /** Labels that introduce something that is *not* a tracking number. */
-const NEGATIVE_RE =
-  /\b(?:order|orders|invoice|phone|call|tel|telephone|fax|mobile|sku|item|zip|zipcode|card|account|acct|ref|reference|receipt|customer|member|rewards|gift|model|serial|isbn|upc|qty|quantity|price|total|subtotal|amount|transaction|pin)\b/gi;
+const NEGATIVE_RE = new RegExp(
+  `\\b(?:${[
+    "order", "orders", "invoice", "receipt", "transaction", "account", "acct", "customer", "member", "rewards",
+    "ref", "reference", "case", "ticket", "claim", "rma", "booking", "reservation",
+    "phone", "call", "tel", "telephone", "fax", "mobile",
+    "sku", "item", "model", "serial", "isbn", "upc", "qty", "quantity",
+    "price", "total", "subtotal", "amount", "card", "gift", "promo", "coupon", "voucher", "pin", "routing",
+    "zip", "zipcode",
+  ].join("|")})\\b`,
+  "gi",
+);
 
 /** Words that mean a nearby 10/11-digit number is a phone number. */
 const PHONE_WORD_RE = /\b(?:call|phone|tel|telephone|fax|mobile|cell|sms|dial|hotline|toll[\s-]?free)\b/i;
@@ -63,17 +72,12 @@ function lastIndex(re: RegExp, text: string): number {
 }
 
 function readContext(before: string): Context {
-  const carriers = carriersMentioned(before);
-  const lastPositive = Math.max(
-    lastIndex(POSITIVE_RE, before),
-    lastIndex(CARRIER_LABEL_RE, before),
-    lastIndex(UPS_LABEL_RE, before),
-  );
-  const lastNegative = lastIndex(NEGATIVE_RE, before);
+  const lastKeyword = lastIndex(POSITIVE_RE, before);
+  const lastLabel = Math.max(lastKeyword, lastIndex(CARRIER_LABEL_RE, before), lastIndex(UPS_LABEL_RE, before));
   return {
-    keyword: lastIndex(POSITIVE_RE, before) >= 0,
-    carriers,
-    negative: lastNegative > lastPositive,
+    keyword: lastKeyword >= 0,
+    carriers: carriersMentioned(before),
+    negative: lastIndex(NEGATIVE_RE, before) > lastLabel,
   };
 }
 
@@ -153,7 +157,7 @@ interface Token {
   start: number;
   end: number;
   hasDigit: boolean;
-  /** Can be part of a grouped number: has a digit, or is 1–4 uppercase letters ("TBA", "US", "YW"). */
+  /** Can be part of a grouped number: has a digit, or is 1-4 uppercase letters ("TBA", "US", "YW"). */
   groupable: boolean;
 }
 
@@ -181,7 +185,7 @@ function jointAfter(text: string, tokens: Token[], i: number): Joint {
   if (!next || !tokens[i].groupable || !next.groupable) return null;
   const sep = text.slice(tokens[i].end, next.start);
   if (sep === "-") return "dash";
-  if (/^(?:[ \t    ]|  )$/.test(sep)) return "space";
+  if (/^(?:[ \t\u00A0\u2007\u2009\u202F]|  )$/.test(sep)) return "space";
   return null;
 }
 

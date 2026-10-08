@@ -45,23 +45,23 @@ const TRACKING_PARAMS = new Set([
   "tracknumber",
   "tracknumbers",
   "trknbr",
-  "tracking",
   "trackingnumber",
   "trackingnumbers",
   "tracking_number",
   "tracking_numbers",
   "tracking-number",
   "tracking-numbers",
-  "trackingid",
-  "tracking_id",
   "tracking-id",
   "awb",
   "piececode",
 ]);
 const NUMBERED_TRACKING_PARAM_RE = /^(?:inquirynumber|qtc_tlabels|tracknums?)\d+$/;
 
-/** Generic parameter names that mean "tracking number" only on a carrier's own host. */
-const CARRIER_HOST_PARAMS = new Set(["number"]);
+/**
+ * Generic names that mean "tracking number" only on a carrier's own host.
+ * Elsewhere they are often click-tracking or analytics IDs (?trackingId=...).
+ */
+const CARRIER_HOST_PARAMS = new Set(["number", "tracking", "trackingid", "tracking_id"]);
 
 /** Parameters whose value names the carrier on branded tracking pages. */
 const CARRIER_PARAMS = new Set(["carrier", "courier", "carrier_code", "slug"]);
@@ -97,7 +97,7 @@ function isTrackingParam(name: string): boolean {
  */
 function splitValue(value: string): string[] {
   return value
-    .split(/[^A-Za-z0-9  .-]+/)
+    .split(/[^A-Za-z0-9 \u00A0.-]+/)
     .map((p) => p.trim())
     .filter((p) => /[0-9]/.test(p));
 }
@@ -135,8 +135,8 @@ export function linkCandidates(rawUrl: string, depth = 0): LinkCandidate[] {
       if (CARRIER_PARAMS.has(key.toLowerCase())) urlCarrier ??= carrierFromWord(value);
     }
   }
-  const trackingHost = hostCarrier !== null || TRACKING_ONLY_HOSTS.some((d) => hostIs(host, d));
-  const anySegmentIsNumber = TRACKING_ONLY_HOSTS.some((d) => hostIs(host, d));
+  const trackingOnlyHost = TRACKING_ONLY_HOSTS.some((d) => hostIs(host, d));
+  const trackingHost = hostCarrier !== null || trackingOnlyHost;
 
   for (const [key, value] of url.searchParams) {
     if (depth < MAX_DEPTH && /^\s*(?:https?:\/\/|www\.)/i.test(value)) {
@@ -152,19 +152,15 @@ export function linkCandidates(rawUrl: string, depth = 0): LinkCandidate[] {
 
   segments.forEach((seg, i) => {
     const afterTrack = i > 0 && TRACK_SEGMENT_RE.test(segments[i - 1]);
-    const source: LinkSource = trackingHost && (afterTrack || anySegmentIsNumber) ? "path" : "other";
+    const source: LinkSource = trackingHost && (afterTrack || trackingOnlyHost) ? "path" : "other";
     for (const piece of splitValue(seg)) out.push({ value: piece, source, urlCarrier });
   });
 
   if (depth < MAX_DEPTH) {
+    // The first embedded URL after the scheme; the recursive call handles deeper nesting.
     const decoded = safeDecode(rawUrl);
-    const embedded = /https?:\/\//gi;
-    let m: RegExpExecArray | null;
-    while ((m = embedded.exec(decoded)) !== null) {
-      if (m.index === 0) continue;
-      out.push(...linkCandidates(decoded.slice(m.index), depth + 1));
-      break; // the recursive call handles any further nesting
-    }
+    const at = decoded.slice(1).search(/https?:\/\//i);
+    if (at >= 0) out.push(...linkCandidates(decoded.slice(at + 1), depth + 1));
   }
   return out;
 }
