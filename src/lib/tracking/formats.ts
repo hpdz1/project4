@@ -40,6 +40,7 @@ export type FormatId =
   | "fedex_gsn"
   | "fedex_astra"
   | "fedex_sscc18"
+  | "fedex_ground_economy_20"
   | "dhl_express"
   | "dhl_piece_id"
   | "dhl_ecommerce"
@@ -120,20 +121,26 @@ function uspsRoutings(s: string): { pic: string; zipLen: 0 | 5 | 9 }[] {
   ];
 }
 
-/** IMpb PIC shape (Pub 199 Appendix J): channel AI 92/93/94/95, service code, MID, serial, check. */
+/**
+ * IMpb PIC shape (Pub 199 Appendix J). Commercial AIs: 92 = 9-digit MID (starts
+ * with 9), 93 = 6-digit MID (doesn't), 95 = retail; PIC is 22 or 26 digits.
+ * AI 94 puts a 2-digit Source ID before the MID, so its MID can't be read from
+ * a fixed position; N constructs are 22, 26 or 30 digits. (The research
+ * fact-check overrides tracking_number_data here, which rejects 30-digit N10
+ * numbers whose Source ID doesn't start with 9.)
+ */
 function isImpbPic(pic: string): boolean {
   const len = pic.length;
-  if (len !== 22 && len !== 26 && len !== 30) return false;
-  const mid9 = pic[5] === "9"; // 9-digit MIDs start with 9; 6-digit MIDs don't.
+  const mid9 = pic[5] === "9";
   switch (pic.slice(0, 2)) {
     case "92":
-      return mid9 && len !== 30;
+      return mid9 && (len === 22 || len === 26);
     case "93":
-      return !mid9 && len !== 30;
+      return !mid9 && (len === 22 || len === 26);
     case "94":
-      return mid9 || len !== 30;
+      return len === 22 || len === 26 || len === 30;
     case "95":
-      return len !== 30;
+      return len === 22 || len === 26;
     default:
       return false;
   }
@@ -335,6 +342,21 @@ const FORMATS: readonly FormatDef[] = [
       const m = /^[0-9]{2}([0-9]{15})([0-9])$/.exec(s);
       if (!m) return null;
       return { valid: ok(m[2], mod10CheckDigit(m[1], 3, 1)), format: "FedEx Ground SSCC-18" };
+    },
+  },
+  {
+    id: "fedex_ground_economy_20",
+    carrier: "fedex",
+    evidence: "context",
+    rank: 55,
+    match(s) {
+      // FedEx Ground Economy (SmartPost) prints a USPS IMpb without its "92" AI:
+      // service code (3) + 9-digit MID starting with 9 + serial (7) + check. The
+      // check digit is the IMpb one, computed with the "92" in place (real FedEx
+      // email fixture 61299998820821171811 validates only this way).
+      if (!/^[0-9]{3}9[0-9]{16}$/.test(s)) return null;
+      const [serial, check] = body(s);
+      return { valid: ok(check, uspsCheckDigit(`92${serial}`)), format: "FedEx Ground Economy (20 digits)" };
     },
   },
   {
