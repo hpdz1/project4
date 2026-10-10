@@ -145,6 +145,8 @@ export function buildFilterInstructions(
 | `DELETE /api/session` | none | Sign out on this device → `{ ok: true }` (works without a session) |
 | `GET /api/dashboard` | session | `DashboardResponse` |
 | `PATCH /api/shipments/[id]` | session | `{ hidden?, delivered? }` → `{ shipment: StoredShipment }` |
+| `DELETE /api/shipments/[id]` | session | Delete one shipment permanently → `{ ok: true }` |
+| `GET /api/account/export` | session | Download everything we hold about the account (`AccountExport`, JSON attachment) |
 | `POST /api/inbound/postmark` | basic auth | Postmark inbound webhook |
 | `POST /api/inbound/raw` | bearer | Generic JSON inbound email |
 | `POST /api/demo/seed` | session, `DEMO_MODE=1` only | Inject sample carrier emails into the current account → `{ added, updates }` |
@@ -176,3 +178,28 @@ don't retry it forever.
   configured in the AdSense dashboard (no code here).
 - Metadata API, `sitemap.ts`, `robots.ts`, Article JSON-LD on guides. Private pages
   (`/dashboard`, `/setup`, `/signin`) are `noindex`.
+
+## Worldwide
+
+Package Radar is for users in any country. The UI is English only, written so browser
+translation works well: `<html lang="en">`, real text (no text in images), unambiguous
+dates ("Tue, Oct 13"), and `translate="no"` on values that must not be translated
+(inbound address, filter queries, tracking numbers, confirmation codes, brand name).
+
+- `CarrierId` covers national posts and major couriers worldwide; UPU S10 items from
+  posts we don't name are `intl_post` (with `originCountry`).
+- `ProgramId` is a string: programs are data in `src/lib/programs`, per country, and the
+  API validates ids against `PROGRAMS`.
+- `parseEmail(email, ctx)` takes the account's `timezone` and `country` to resolve
+  relative dates and dd/mm vs mm/dd. Status keywords and month names are multilingual.
+- Item descriptions are never stored (they can reveal sensitive purchases such as
+  pharmacy orders). We keep carrier, tracking number / order reference, shipper, status
+  and dates only.
+
+## Retention
+
+Enforced by `Store.purgeExpired(now)` (run opportunistically, at most hourly):
+delivered shipments are deleted 30 days after delivery, shipments with no news for
+60 days are deleted, the email log keeps 90 days (and at most 200 rows), and
+forwarding confirmations are deleted after 48 hours. Users can delete one shipment
+or their whole account at any time and download a JSON export of their data.

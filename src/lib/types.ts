@@ -10,12 +10,69 @@
 // ---------------------------------------------------------------------------
 
 export type CarrierId =
+  // North America
   | "usps"
   | "ups"
   | "fedex"
-  | "dhl"
+  | "dhl" // DHL Express (worldwide)
+  | "dhl_ecommerce"
   | "amazon"
-  | "ontrac"
+  | "ontrac" // incl. former LaserShip
+  | "canada_post"
+  | "purolator"
+  | "estafeta"
+  // Europe
+  | "dhl_paket" // DHL Paket / Deutsche Post (Germany)
+  | "hermes" // Hermes Germany
+  | "royal_mail"
+  | "parcelforce"
+  | "evri"
+  | "dpd"
+  | "gls"
+  | "an_post"
+  | "postnl"
+  | "bpost"
+  | "la_poste" // incl. Colissimo
+  | "chronopost"
+  | "swiss_post"
+  | "austrian_post"
+  | "correos"
+  | "poste_italiane"
+  | "ctt"
+  | "inpost"
+  | "poczta_polska"
+  | "packeta"
+  | "postnord"
+  | "posten_bring"
+  | "posti"
+  | "ptt" // Turkey
+  // Asia-Pacific
+  | "australia_post"
+  | "nz_post"
+  | "japan_post"
+  | "yamato"
+  | "sagawa"
+  | "korea_post"
+  | "cj_logistics"
+  | "china_post"
+  | "cainiao"
+  | "sf_express"
+  | "yunexpress"
+  | "yanwen"
+  | "fourpx" // 4PX
+  | "hongkong_post"
+  | "singpost"
+  | "india_post"
+  | "delhivery"
+  | "blue_dart"
+  // Latin America, Middle East & Africa
+  | "correios" // Brazil
+  | "aramex"
+  | "emirates_post"
+  | "smsa"
+  | "israel_post"
+  // Fallbacks
+  | "intl_post" // UPU S10 item from a postal operator we don't name individually
   | "unknown";
 
 export interface DetectedTrackingNumber {
@@ -30,6 +87,8 @@ export interface DetectedTrackingNumber {
    * null  = format has no check digit
    */
   checksumValid: boolean | null;
+  /** ISO 3166-1 alpha-2 country encoded in the number, if any (UPU S10 items end in the origin country, e.g. "CN"). */
+  originCountry?: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -60,6 +119,7 @@ export type SourceKind =
   | "fedex" // FedEx Delivery Manager / FedEx tracking emails
   | "amazon" // Amazon shipment notifications
   | "dhl" // DHL Express / On Demand Delivery
+  | "carrier_alert" // a notification from any other known carrier or postal service (worldwide)
   | "generic"; // any other email that contained a recognizable tracking number
 
 /** A provider-neutral inbound email, after webhook payload normalization. */
@@ -90,8 +150,6 @@ export interface ShipmentUpdate {
   orderRef: string | null;
   /** Who sent the package, e.g. "ACME OUTDOOR CO" (USPS digest "From:" line, UPS "Shipper"). */
   shipper: string | null;
-  /** Item description when known (e.g. Amazon item title). */
-  description: string | null;
   /** null = this email didn't say. */
   status: ShipmentStatus | null;
   /** Expected delivery date as YYYY-MM-DD (calendar date at the delivery address). */
@@ -120,6 +178,14 @@ export interface ForwardingVerification {
   receivedAt: string;
 }
 
+/** Context that helps interpret an email (relative dates, dd/mm vs mm/dd). */
+export interface ParseContext {
+  /** IANA time zone of the delivery address (the account's). */
+  timezone?: string;
+  /** ISO 3166-1 alpha-2 country of the delivery address (the account's). */
+  country?: string;
+}
+
 export interface ParsedEmail {
   /** What we recognized the email as. */
   kind: SourceKind | "forwarding_verification" | "ignored";
@@ -133,20 +199,12 @@ export interface ParsedEmail {
 // Carrier programs ("turn these on once")
 // ---------------------------------------------------------------------------
 
-export type ProgramId =
-  | "usps_informed_delivery"
-  | "ups_my_choice"
-  | "fedex_delivery_manager"
-  | "amazon_orders"
-  | "dhl_on_demand"
-  | "ontrac_notifyme"
-  | "canada_post_auto_tracking"
-  | "royal_mail_app"
-  | "evri_app"
-  | "dpd_uk_app"
-  | "postnl_account"
-  | "dhl_paket_de"
-  | "australia_post_mypost";
+/**
+ * Id of a carrier program in PROGRAMS (src/lib/programs), e.g. "usps_informed_delivery".
+ * Data-driven so programs can be added per country without touching this file;
+ * the API validates ids against PROGRAMS.
+ */
+export type ProgramId = string;
 
 export type ProgramState = "done" | "skipped";
 
@@ -181,7 +239,6 @@ export interface StoredShipment {
   trackingNumber: string | null;
   orderRef: string | null;
   shipper: string | null;
-  description: string | null;
   status: ShipmentStatus;
   expectedDelivery: string | null;
   expectedWindow: string | null;
@@ -287,6 +344,60 @@ export interface UpdateShipmentRequest {
   delivered?: boolean;
 }
 
+/** PATCH /api/shipments/[id] */
+export interface UpdateShipmentResponse {
+  shipment: StoredShipment;
+}
+
+/** DELETE /api/account, DELETE /api/session, DELETE /api/shipments/[id] */
+export interface OkResponse {
+  ok: true;
+}
+
+/** POST /api/demo/seed */
+export interface DemoSeedResponse {
+  /** Emails ingested. */
+  added: number;
+  /** Shipment changes they produced. */
+  updates: number;
+}
+
+/** POST /api/inbound/postmark, POST /api/inbound/raw */
+export interface InboundResponse {
+  ok: true;
+  status: "stored" | "unroutable" | "rate_limited";
+  kind?: ParsedEmail["kind"];
+  updates?: number;
+}
+
+/** GET /api/account/export — everything we hold about an account (data portability). */
+export interface AccountExport {
+  exportedAt: string;
+  account: AccountView;
+  shipments: StoredShipment[];
+  emailLog: {
+    receivedAt: string;
+    kind: ParsedEmail["kind"];
+    senderDomain: string | null;
+    updates: number;
+    note: string | null;
+  }[];
+  verifications: ForwardingVerification[];
+}
+
+export type ApiErrorCode =
+  | "invalid_json"
+  | "invalid_input"
+  | "unauthorized"
+  | "forbidden"
+  | "not_found"
+  | "payload_too_large"
+  | "unsupported_media_type"
+  | "rate_limited"
+  | "demo_disabled"
+  | "inbound_disabled"
+  | "server_error";
+
 export interface ApiError {
-  error: { code: string; message: string };
+  error: { code: ApiErrorCode; message: string };
 }
