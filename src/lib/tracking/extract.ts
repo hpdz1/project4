@@ -1,19 +1,29 @@
 import type { CarrierId, DetectedTrackingNumber } from "@/lib/types";
-import { carriersMentioned } from "./carriers";
-import { CANDIDATE_LENGTHS, detectAllNormalized, toPublic, type FormatMatch } from "./formats";
+import { carrierMentions, lastMentionEnd, sameFamily } from "./carriers";
+import {
+  CANDIDATE_LENGTHS,
+  MAX_CANDIDATE_LENGTH,
+  detectAllNormalized,
+  isRepeatedChar,
+  toPublic,
+  type FormatMatch,
+} from "./formats";
+import { NEGATIVE_RE, PHONE_WORD_RE, POSITIVE_RE, lastMatchEnd } from "./labels";
 import { findLinks, type LinkCandidate } from "./links";
 import { normalizeTrackingNumber } from "./normalize";
 
 /**
- * Finding tracking numbers in whole emails (text or HTML) without drowning in
- * order numbers, phone numbers, ZIP codes and prices.
+ * Finding tracking numbers in whole emails (text or HTML), in any language,
+ * without drowning in order numbers, phone numbers, postcodes and prices.
  *
  * - Links are parsed first: named tracking parameters and tracking-page paths
- *   are trusted; anything else in a link must be a distinctive format.
- * - In free text, distinctive formats (1Z, IMpb, TBA, S10, OnTrac C/D, ...)
+ *   are trusted; anything else in a link must be a distinctive format. On a
+ *   carrier's own host only that carrier's (or a sister company's) formats count.
+ * - In free text, distinctive formats (1Z, IMpb, TBA, S10, JJD, 3S, SF, ...)
  *   need only a passing check digit. Short or all-digit formats need a carrier
- *   hint, the carrier's name or a tracking keyword in the 60 characters before
- *   them, and are rejected next to order/phone/price labels or in phone shapes.
+ *   hint, the carrier's name or (for some) a tracking keyword in the 60
+ *   characters before them, and are rejected next to order/phone/price labels
+ *   or in phone shapes. See `Evidence` in formats.ts.
  */
 
 export interface FindOptions {
@@ -26,29 +36,11 @@ const INVISIBLE_RE = /[\u200B-\u200D\u2060\uFEFF\u00AD]/g;
 const NBSP_ENTITY_RE = /&(?:nbsp|#160|#xa0);/gi;
 
 const CONTEXT_CHARS = 60;
-const MAX_CANDIDATE_LENGTH = Math.max(...CANDIDATE_LENGTHS);
-
-/** Labels that introduce a tracking number. */
-const POSITIVE_RE = /\b(?:track|tracking|tracked|waybill|awb|shipment|shipments|consignment)\b/gi;
-/** Labels that introduce something that is *not* a tracking number. */
-const NEGATIVE_RE = new RegExp(
-  `\\b(?:${[
-    "order", "orders", "invoice", "receipt", "transaction", "account", "acct", "customer", "member", "rewards",
-    "ref", "reference", "case", "ticket", "claim", "rma", "booking", "reservation",
-    "phone", "call", "tel", "telephone", "fax", "mobile",
-    "sku", "item", "model", "serial", "isbn", "upc", "qty", "quantity",
-    "price", "total", "subtotal", "amount", "card", "gift", "promo", "coupon", "voucher", "pin", "routing",
-    "zip", "zipcode",
-  ].join("|")})\\b`,
-  "gi",
-);
-
-/** Words that mean a nearby 10/11-digit number is a phone number. */
-const PHONE_WORD_RE = /\b(?:call|phone|tel|telephone|fax|mobile|cell|sms|dial|hotline|toll[\s-]?free)\b/i;
-
-/** Carrier names also count as labels ("FedEx: 1234…"). "UPS" is case-sensitive ("follow-ups"). */
-const CARRIER_LABEL_RE = /\b(?:usps|postal service|fed\s?ex|dhl|amazon|on\s?trac|laser\s?ship)\b/gi;
-const UPS_LABEL_RE = /\bUPS\b/g;
+/**
+ * Most printed groups one number spans ("4201 0282 0000 9261 2901 1318 5417 4685 10"
+ * is 9). Bounds the work per token so digit-dense text stays linear.
+ */
+const MAX_TOKENS_PER_WINDOW = 12;
 
 interface Found {
   pos: number;
@@ -59,33 +51,42 @@ interface Found {
 interface Context {
   /** A tracking keyword appears before the candidate. */
   keyword: boolean;
-  /** Carriers named before the candidate. */
-  carriers: Set<CarrierId>;
-  /** The label nearest the candidate is a negative one (order #, phone, ...). */
+  /** Carriers named before the candidate, nearest first. */
+  carriers: CarrierId[];
+  /** The label nearest the candidate is a negative one (order #, phone, VAT, ...). */
   negative: boolean;
-}
-
-function lastIndex(re: RegExp, text: string): number {
-  let last = -1;
-  for (const m of text.matchAll(re)) last = (m.index ?? 0) + m[0].length;
-  return last;
+  /** A phone word ("call", "Tel.", "電話") comes after the last tracking keyword. */
+  phoneWord: boolean;
 }
 
 function readContext(before: string): Context {
-  const lastKeyword = lastIndex(POSITIVE_RE, before);
-  const lastLabel = Math.max(lastKeyword, lastIndex(CARRIER_LABEL_RE, before), lastIndex(UPS_LABEL_RE, before));
+  const lastKeyword = lastMatchEnd(POSITIVE_RE, before);
+  const lastLabel = Math.max(lastKeyword, lastMentionEnd(before));
   return {
     keyword: lastKeyword >= 0,
-    carriers: carriersMentioned(before),
-    negative: lastIndex(NEGATIVE_RE, before) > lastLabel,
+    carriers: carrierMentions(before),
+    negative: lastMatchEnd(NEGATIVE_RE, before) > lastLabel,
+    phoneWord: lastMatchEnd(PHONE_WORD_RE, before) > lastKeyword,
   };
 }
 
-/** Puts matches for the preferred carriers first, keeping detection order otherwise. */
-function preferCarriers(matches: FormatMatch[], preferred: (CarrierId | null)[]): FormatMatch[] {
+/** True when `carrier` is `c` or a sister company of one of `cs`. */
+function inFamily(carrier: CarrierId, cs: readonly (CarrierId | null)[]): boolean {
+  return cs.some((c) => c !== null && sameFamily(c, carrier));
+}
+
+/**
+ * Puts matches for the preferred carriers first (exact carrier before sister
+ * company, earlier preference first), keeping detection order otherwise.
+ */
+function preferCarriers(matches: FormatMatch[], preferred: readonly (CarrierId | null)[]): FormatMatch[] {
   const order = (m: FormatMatch) => {
-    const i = preferred.indexOf(m.carrier);
-    return i === -1 ? preferred.length : i;
+    for (let i = 0; i < preferred.length; i++) {
+      const c = preferred[i];
+      if (c === m.carrier) return 2 * i;
+      if (c !== null && sameFamily(c, m.carrier)) return 2 * i + 1;
+    }
+    return 2 * preferred.length;
   };
   return matches
     .map((m, i) => ({ m, i }))
@@ -105,7 +106,12 @@ function classifyLinkValue(
   cand: LinkCandidate,
   hint: CarrierId | null,
 ): DetectedTrackingNumber | null | "drop" {
-  const all = detectAllNormalized(s);
+  let all = detectAllNormalized(s);
+  // On a carrier's own pages a number is that carrier's (or a sister company's), unless its format is distinctive.
+  if (cand.urlCarrier) {
+    const own = cand.urlCarrier;
+    all = all.filter((m) => m.evidence === "distinctive" || sameFamily(m.carrier, own));
+  }
   const usable = preferCarriers(
     all.filter((m) => m.checksumValid !== false),
     [cand.urlCarrier, hint],
@@ -114,10 +120,10 @@ function classifyLinkValue(
     if (m.evidence === "distinctive") return toPublic(m);
     if (cand.source === "other") continue;
     if (m.evidence === "context") return toPublic(m);
-    if (m.carrier === cand.urlCarrier || m.carrier === hint) return toPublic(m);
+    if (inFamily(m.carrier, [cand.urlCarrier, hint])) return toPublic(m);
   }
   if (all.some((m) => m.checksumValid === false)) return "drop";
-  if (cand.source === "param" && UNRECOGNIZED_RE.test(s)) {
+  if (cand.source === "param" && UNRECOGNIZED_RE.test(s) && !isRepeatedChar(s)) {
     const carrier = cand.urlCarrier ?? "unknown";
     return {
       trackingNumber: s,
@@ -161,6 +167,11 @@ interface Token {
   groupable: boolean;
 }
 
+/**
+ * "space": a single space/NBSP (or two spaces). "dash": a single dash, or a
+ * dot between digit groups (Swiss Post "99.60.132730.02019507"); a number
+ * is never cut out of a dash compound (order 113-1234567-1234567, dates).
+ */
 type Joint = "space" | "dash" | null;
 
 function tokenize(text: string): Token[] {
@@ -179,32 +190,46 @@ function tokenize(text: string): Token[] {
   return tokens;
 }
 
-/** How token i joins token i+1: a single space/NBSP (or two spaces) or a single dash. */
+const DIGITS_RE = /^[0-9]+$/;
+
+/** How token i joins token i+1. */
 function jointAfter(text: string, tokens: Token[], i: number): Joint {
   const next = tokens[i + 1];
   if (!next || !tokens[i].groupable || !next.groupable) return null;
   const sep = text.slice(tokens[i].end, next.start);
   if (sep === "-") return "dash";
+  if (sep === "." && DIGITS_RE.test(tokens[i].text) && DIGITS_RE.test(next.text)) return "dash";
   if (/^(?:[ \t\u00A0\u2007\u2009\u202F]|  )$/.test(sep)) return "space";
   return null;
 }
 
-/** All-digit candidates that look like phone numbers: 3-3-4 / 1-3-3-4 groups, or "+"/"(" in front. */
+/**
+ * All-digit candidates printed like phone numbers: North American 3-3-4 /
+ * 1-3-3-4; a "+" or "(" in front; an international "00" prefix; a trunk "0"
+ * plus area code followed by subscriber groups (030 12345678, 020 7946 0018,
+ * 01 23 45 67 89, 03-1234-5678, 0412 345 678); Chinese mobiles 1xx xxxx xxxx.
+ */
 function looksLikePhone(text: string, raw: string, start: number): boolean {
   if (/[A-Za-z]/.test(raw)) return false;
-  const groups = raw
-    .split(/[^0-9]+/)
-    .filter(Boolean)
-    .map((g) => g.length)
-    .join(",");
-  if (groups === "3,3,4" || groups === "1,3,3,4") return true;
+  const groups = raw.split(/[^0-9]+/).filter(Boolean);
+  const shape = groups.map((g) => g.length).join(",");
+  if (shape === "3,3,4" || shape === "1,3,3,4") return true;
+  if (groups.length >= 2) {
+    const digits = groups.join("").length;
+    const first = groups[0];
+    if (digits >= 9 && digits <= 13 && groups[groups.length - 1].length >= 2) {
+      if (/^00[1-9]/.test(first)) return true;
+      if (/^0[1-9]/.test(first) && first.length <= 5 && !groups.every((g) => g.length === 4)) return true;
+    }
+    if (shape === "3,4,4" && first.startsWith("1")) return true;
+  }
   const prefix = text.slice(Math.max(0, start - 3), start).trimEnd();
   return /[+(]$/.test(prefix);
 }
 
-/** 10 digits, or 11 starting with the US country code 1. */
+/** Lengths phone numbers have once their punctuation is gone (national and international forms). */
 function isPhoneLength(n: string): boolean {
-  return /^(?:1?[0-9]{10})$/.test(n);
+  return /^[0-9]{8,14}$/.test(n);
 }
 
 interface TextHit {
@@ -217,36 +242,34 @@ interface TextHit {
 function acceptFromText(
   matches: FormatMatch[],
   text: string,
-  tokens: Token[],
-  first: number,
-  last: number,
-  joints: Joint[],
+  start: number,
+  end: number,
+  standalone: boolean,
   hint: CarrierId | null,
+  context: () => Context,
 ): DetectedTrackingNumber | null {
-  const start = tokens[first].start;
-  const raw = text.slice(start, tokens[last].end);
-  let context: Context | null = null;
-  const standalone =
-    !(first > 0 && joints[first - 1] && tokens[first - 1].hasDigit) &&
-    !(joints[last] && tokens[last + 1].hasDigit);
+  const valid = matches.filter((x) => x.checksumValid !== false);
+  if (valid.length === 0) return null;
+  const raw = text.slice(start, end);
+  // When carriers disagree, the ones named nearby go first (the number's own label beats the sender), then the hint.
+  const contested = valid.some((m) => !sameFamily(m.carrier, valid[0].carrier));
+  const preferred: (CarrierId | null)[] = contested ? [...context().carriers, hint] : [hint];
 
-  for (const m of preferCarriers(
-    matches.filter((x) => x.checksumValid !== false),
-    [hint],
-  )) {
+  for (const m of preferCarriers(valid, preferred)) {
     // Printed tracking numbers are uppercase; lowercase prose ("in 1234567890") is not one.
     if (m.checksumValid === null && /[a-z]/.test(raw)) continue;
     if (m.evidence === "distinctive") return toPublic(m);
     if (!standalone || looksLikePhone(text, raw, start)) continue;
-    const before = text.slice(Math.max(0, start - CONTEXT_CHARS), start);
-    if (isPhoneLength(m.trackingNumber) && PHONE_WORD_RE.test(before)) continue;
-    context ??= readContext(before);
-    if (context.negative) continue;
-    const named = context.carriers.has(m.carrier);
-    const hinted = hint === m.carrier;
+    const ctx = context();
+    if (ctx.negative) continue;
+    if (isPhoneLength(m.trackingNumber) && ctx.phoneWord) continue;
+    const named = inFamily(m.carrier, ctx.carriers);
+    const hinted = hint !== null && sameFamily(hint, m.carrier);
     if (m.evidence === "context") {
-      if (named || hinted || (context.keyword && (hint === null || hinted))) return toPublic(m);
-    } else if ((named || hinted) && context.keyword) {
+      if (named || hinted || (ctx.keyword && hint === null)) return toPublic(m);
+    } else if (m.evidence === "named") {
+      if (named || hinted) return toPublic(m);
+    } else if ((named || hinted) && ctx.keyword) {
       return toPublic(m);
     }
   }
@@ -262,16 +285,22 @@ function findInText(text: string, hint: CarrierId | null): { pos: number; result
     if (!tokens[first].groupable) continue;
     // Never start inside a dash-joined compound (e.g. order 113-1234567-1234567).
     if (first > 0 && joints[first - 1] === "dash") continue;
+    const start = tokens[first].start;
+    const joinedBefore = first > 0 && joints[first - 1] !== null && tokens[first - 1].hasDigit;
+    let context: Context | null = null;
+    const readOnce = () => (context ??= readContext(text.slice(Math.max(0, start - CONTEXT_CHARS), start)));
     let s = "";
-    for (let last = first; last < tokens.length; last++) {
+    for (let last = first; last < tokens.length && last - first < MAX_TOKENS_PER_WINDOW; last++) {
       if (last > first && !joints[last - 1]) break;
       s += tokens[last].text.toUpperCase();
       if (s.length > MAX_CANDIDATE_LENGTH) break;
       if (joints[last] === "dash") continue; // never end inside a dash compound either
-      if (!CANDIDATE_LENGTHS.has(s.length)) continue;
-      const matches = detectAllNormalized(s);
+      if (!CANDIDATE_LENGTHS.has(s.length) || isRepeatedChar(s)) continue;
+      // A window glued to more digits can only be a distinctive number ("Qty 2 9400 1118 ...").
+      const standalone = !joinedBefore && !(joints[last] && tokens[last + 1].hasDigit);
+      const matches = detectAllNormalized(s, { distinctiveOnly: !standalone });
       if (matches.length === 0) continue;
-      const result = acceptFromText(matches, text, tokens, first, last, joints, hint);
+      const result = acceptFromText(matches, text, start, tokens[last].end, standalone, hint, readOnce);
       if (result) hits.push({ first, last, length: s.length, result });
     }
   }
@@ -312,7 +341,8 @@ function blankLinks(text: string, links: { start: number; end: number }[]): stri
  */
 export function findTrackingNumbers(text: string, opts: FindOptions = {}): DetectedTrackingNumber[] {
   const hint = opts.carrierHint && opts.carrierHint !== "unknown" ? opts.carrierHint : null;
-  const clean = text.replace(INVISIBLE_RE, "").replace(NBSP_ENTITY_RE, " ");
+  // NFKC turns full-width digits and letters (common in Japanese and Chinese emails) into ASCII.
+  const clean = text.replace(INVISIBLE_RE, "").replace(NBSP_ENTITY_RE, " ").normalize("NFKC");
   const found: Found[] = [];
   let seq = 0;
 

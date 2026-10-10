@@ -36,7 +36,6 @@ const CHECKSUM_VALID: [input: string, carrier: CarrierId, format: string][] = [
   ["9101123456789000000013", "usps", "USPS legacy (22 digits)"],
   ["03071790000523483741", "usps", "USPS (20 digits)"],
   ["71969010756003077385", "usps", "USPS (20 digits)"], // valid only with the implied "91"
-  ["RB123456785US", "usps", "UPU S10 international mail"],
   ["986578788855", "fedex", "FedEx Express (12 digits)"],
   ["477179081230", "fedex", "FedEx Express (12 digits)"],
   ["041441760228964", "fedex", "FedEx Ground (15 digits)"],
@@ -55,8 +54,7 @@ const CHECKSUM_VALID: [input: string, carrier: CarrierId, format: string][] = [
 
 const NO_CHECK_DIGIT: [input: string, carrier: CarrierId, format: string, normalized: string][] = [
   ["JJD0099999999", "dhl", "DHL Express piece ID", "JJD0099999999"],
-  ["GM2951173225174494", "dhl", "DHL eCommerce", "GM2951173225174494"],
-  ["60120172242323", "dhl", "DHL eCommerce (14 digits)", "60120172242323"],
+  ["GM2951173225174494", "dhl_ecommerce", "DHL eCommerce", "GM2951173225174494"],
   ["TBA305938274011", "amazon", "Amazon Logistics (TBA)", "TBA305938274011"],
   ["TBC 000000000000", "amazon", "Amazon Logistics (TBA)", "TBC000000000000"],
   ["C1004444443", "amazon", "Amazon international", "C1004444443"],
@@ -101,6 +99,27 @@ describe("detectTrackingNumber", () => {
       trackingNumber: normalized,
       carrier,
       format,
+      checksumValid: null,
+    });
+  });
+
+  it("reports a UPU S10 number's country of origin", () => {
+    expect(detectTrackingNumber("RB123456785US")).toEqual({
+      trackingNumber: "RB123456785US",
+      carrier: "usps",
+      format: "UPU S10 international mail",
+      checksumValid: true,
+      originCountry: "US",
+    });
+  });
+
+  it("reports a bare 14-digit DHL eCommerce number only for a DHL sender", () => {
+    // "14 digits, no check digit" fits DPD, Delhivery and others too.
+    expect(detectTrackingNumber("60120172242323")).toBeNull();
+    expect(detectTrackingNumber("60120172242323", { carrierHint: "dhl" })).toEqual({
+      trackingNumber: "60120172242323",
+      carrier: "dhl_ecommerce",
+      format: "DHL eCommerce (14 digits)",
       checksumValid: null,
     });
   });
@@ -180,7 +199,8 @@ describe("detectTrackingNumber", () => {
 
     it("prefers S10 over DHL eCommerce for LX/CN/RX-prefixed international mail", () => {
       expect(detectTrackingNumber("LX123456785CN")).toMatchObject({
-        carrier: "usps",
+        carrier: "china_post",
+        originCountry: "CN",
         format: "UPU S10 international mail",
         checksumValid: true,
       });

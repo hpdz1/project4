@@ -54,6 +54,11 @@ const TRACKING_PARAMS = new Set([
   "tracking-id",
   "awb",
   "piececode",
+  "mailnolist",
+  "listenumeroslt",
+  "okurijono",
+  "reqcodeno1",
+  "consignmentnumber",
 ]);
 const NUMBERED_TRACKING_PARAM_RE = /^(?:inquirynumber|qtc_tlabels|tracknums?)\d+$/;
 
@@ -63,14 +68,73 @@ const NUMBERED_TRACKING_PARAM_RE = /^(?:inquirynumber|qtc_tlabels|tracknums?)\d+
  */
 const CARRIER_HOST_PARAMS = new Set(["number", "tracking", "trackingid", "tracking_id"]);
 
+/**
+ * Parameter names that carry the number on one carrier's tracking pages only
+ * (research/worldwide/tracking-formats-intl.md §7). Too generic ("id", "q",
+ * "code", "item") to trust anywhere else, including the carrier's other pages.
+ */
+const HOST_PARAMS: readonly [domain: string, params: readonly string[]][] = [
+  ["tracking.postnord.com", ["id"]],
+  ["yuntrack.com", ["id"]],
+  ["auspost.com.au", ["id"]],
+  ["mydhl.express.dhl", ["id"]],
+  ["sporing.posten.no", ["q"]],
+  ["sporing.bring.no", ["q"]],
+  ["bring.com", ["packagenumber"]],
+  ["postnl.nl", ["b"]],
+  ["postnl.post", ["barcodes"]],
+  ["laposte.fr", ["code", "idship"]],
+  ["anpost.com", ["item"]],
+  ["gls-group.eu", ["match", "parcelnumber", "matchparcelnumber"]],
+  ["gls-group.com", ["match", "parcelnumber", "matchparcelnumber"]],
+  ["gls-pakete.de", ["match", "trackingnumber"]],
+  ["track.dpd.co.uk", ["reference", "parcelnumber"]],
+  ["tracking.dpd.co.uk", ["reference", "parcelnumber"]],
+  ["dpdgroup.com", ["parcelnumber"]],
+  ["dpd.com", ["parcelnumber"]],
+  ["my.dpd.de", ["parcelno"]],
+  ["emonitoring.poczta-polska.pl", ["numer"]],
+  ["purolator.com", ["pin", "pins", "searchvalue"]],
+  ["canadapost-postescanada.ca", ["searchfor"]],
+  ["canadapost.ca", ["searchfor"]],
+  ["correos.com.br", ["objetos"]],
+  ["ctt.pt", ["objects"]],
+  ["track.yw56.com.cn", ["nums"]],
+  ["member.kms.kuronekoyamato.co.jp", ["pno"]],
+  ["kuronekoyamato.co.jp", ["number01", "no01"]],
+  ["nzpost.co.nz", ["trackid"]],
+  ["myhermes.de", ["trackid", "sendungsid"]],
+  ["aramex.com", ["shipmentnumber"]],
+  ["bluedart.com", ["trackno"]],
+  ["chronopost.fr", ["listenumeros", "numerolt"]],
+  ["cs.estafeta.com", ["waybill"]],
+  ["trackings.post.japanpost.jp", ["requestno1"]],
+  ["track.bpost.cloud", ["itemcode"]],
+  ["trace.epost.go.kr", ["post_code"]],
+  ["service.epost.go.kr", ["sid1"]],
+  ["inpost.pl", ["number"]],
+  ["packeta.com", ["id"]],
+  ["mojdhl.pl", ["paczki"]],
+  ["sprawdz.dhl.com.pl", ["sn"]],
+  ["track.dhlecommerce.co.uk", ["con"]],
+  ["track.dhlparcel.co.uk", ["con"]],
+];
+
 /** Parameters whose value names the carrier on branded tracking pages. */
 const CARRIER_PARAMS = new Set(["carrier", "courier", "carrier_code", "slug"]);
 
-/** Path segments after which a tracking page puts the number. */
-const TRACK_SEGMENT_RE = /^(?:track|tracking|trackings|tracker|trace)$/i;
+/**
+ * Path (or #fragment path) segments after which a carrier's tracking page puts
+ * the number: /tracking/{n}, /sporing/{n}, DPD /parcel/{n}, Australia Post
+ * /details/{n}, Royal Mail #/tracking-results/{n}, Poste Italiane
+ * #/risultati-spedizioni/{n}, SF #search/bill-number/{n}, ... Only used on
+ * carrier hosts.
+ */
+const TRACK_SEGMENT_RE =
+  /^(?:track|tracking|trackings|tracker|trace|sporing|parcel|details?|tracktrace|trackandtrace|tracking-results|risultati-spedizioni|bill-number|waybill-detail|search|package|sendungsinformation|modificarenvio)$/i;
 
-/** Branded tracking pages whose path segments are tracking numbers (e.g. {shop}.aftership.com/{n}). */
-const TRACKING_ONLY_HOSTS = ["aftership.com"];
+/** Tracking pages whose path segments are tracking numbers (e.g. {shop}.aftership.com/{n}, tracking.packeta.com/en/{n}). */
+const TRACKING_ONLY_HOSTS = ["aftership.com", "tracking.packeta.com", "track.4px.com"];
 
 const MAX_DEPTH = 3;
 
@@ -88,6 +152,13 @@ function hostIs(host: string, domain: string): boolean {
 
 function isTrackingParam(name: string): boolean {
   return TRACKING_PARAMS.has(name) || NUMBERED_TRACKING_PARAM_RE.test(name);
+}
+
+/** Whether parameter `name` (lowercased) carries a tracking number on `host`. */
+function isNamedParam(name: string, host: string, carrierHost: boolean): boolean {
+  if (isTrackingParam(name)) return true;
+  if (carrierHost && CARRIER_HOST_PARAMS.has(name)) return true;
+  return HOST_PARAMS.some(([domain, params]) => hostIs(host, domain) && params.includes(name));
 }
 
 /**
@@ -124,27 +195,32 @@ export function linkCandidates(rawUrl: string, depth = 0): LinkCandidate[] {
   const out: LinkCandidate[] = [];
   const host = url.hostname.toLowerCase();
   const hostCarrier = carrierFromHost(host);
-  const segments = [...url.pathname.split("/"), ...url.hash.replace(/^#/, "").split(/[/?&=]/)]
+  // Single-page trackers keep their route in the #fragment: "#/search?itemCode={n}", "#/result/0/{n}".
+  const hash = url.hash.replace(/^#/, "");
+  const hashQueryAt = hash.indexOf("?");
+  const hashPath = hashQueryAt >= 0 ? hash.slice(0, hashQueryAt) : hash;
+  const params = [...url.searchParams];
+  if (hashQueryAt >= 0) params.push(...new URLSearchParams(hash.slice(hashQueryAt + 1)));
+  const segments = [...url.pathname.split("/"), ...hashPath.split(/[/&=]/)]
     .map(safeDecode)
     .filter((s) => s.length > 0);
 
   let urlCarrier = hostCarrier;
   if (!urlCarrier) {
     for (const seg of segments) urlCarrier ??= carrierFromWord(seg);
-    for (const [key, value] of url.searchParams) {
+    for (const [key, value] of params) {
       if (CARRIER_PARAMS.has(key.toLowerCase())) urlCarrier ??= carrierFromWord(value);
     }
   }
   const trackingOnlyHost = TRACKING_ONLY_HOSTS.some((d) => hostIs(host, d));
   const trackingHost = hostCarrier !== null || trackingOnlyHost;
 
-  for (const [key, value] of url.searchParams) {
+  for (const [key, value] of params) {
     if (depth < MAX_DEPTH && /^\s*(?:https?:\/\/|www\.)/i.test(value)) {
       out.push(...linkCandidates(value.trim(), depth + 1));
       continue;
     }
-    const k = key.toLowerCase();
-    const named = isTrackingParam(k) || (hostCarrier !== null && CARRIER_HOST_PARAMS.has(k));
+    const named = isNamedParam(key.toLowerCase(), host, hostCarrier !== null);
     for (const piece of splitValue(value)) {
       out.push({ value: piece, source: named ? "param" : "other", urlCarrier });
     }

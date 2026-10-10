@@ -65,14 +65,106 @@ export function s10CheckDigit(serial: string): number {
 }
 
 /**
- * USPS (Pub 199 §4.6, also the 20-digit and legacy 91 formats): counting from
- * the right, the digit next to the check digit is weighted 3, then 1, 3, 1, ...
- * `serial` is every digit of the PIC except the check digit (no 420+ZIP prefix).
+ * GS1 mod 10 (SSCC/NVE, GTIN; also USPS Pub 199 §4.6): counting from the
+ * right, the digit next to the check digit is weighted 3, then 1, 3, 1, ...
+ * Used by DHL Paket SSCCs, Hermes 14, Canada Post 16, Bring/PostNord/Posti
+ * SSCCs and the Colissimo key.
  */
-export function uspsCheckDigit(serial: string): number {
+export function gs1CheckDigit(serial: string): number {
   let sum = 0;
   for (let i = serial.length - 1, w = 3; i >= 0; i--, w = w === 3 ? 1 : 3) {
     sum += charValue(serial[i]) * w;
   }
   return (10 - (sum % 10)) % 10;
+}
+
+/**
+ * USPS (Pub 199 §4.6, also the 20-digit and legacy 91 formats): the GS1 rule.
+ * `serial` is every digit of the PIC except the check digit (no 420+ZIP prefix).
+ */
+export function uspsCheckDigit(serial: string): number {
+  return gs1CheckDigit(serial);
+}
+
+/** DHL Paket 12-digit Identcode: weights 4, 9, 4, 9, ... from the left over 11 digits, `(10 - sum % 10) % 10`. */
+export function identcodeCheckDigit(serial: string): number {
+  let sum = 0;
+  for (let i = 0; i < serial.length; i++) sum += charValue(serial[i]) * (i % 2 === 0 ? 4 : 9);
+  return (10 - (sum % 10)) % 10;
+}
+
+/**
+ * Luhn (Purolator 12): from the right of the serial, double every other digit
+ * starting with the one next to the check digit (subtract 9 above 9), then
+ * `(10 - sum % 10) % 10`.
+ */
+export function luhnCheckDigit(serial: string): number {
+  let sum = 0;
+  for (let i = serial.length - 1, double = true; i >= 0; i--, double = !double) {
+    let d = charValue(serial[i]);
+    if (double) {
+      d *= 2;
+      if (d > 9) d -= 9;
+    }
+    sum += d;
+  }
+  return (10 - (sum % 10)) % 10;
+}
+
+/** GLS 12: like GS1 (weights 3, 1, ... from the right) but the sum starts at 1. */
+export function glsCheckDigit(serial: string): number {
+  return (gs1CheckDigit(serial) + 9) % 10;
+}
+
+/**
+ * Evri 16: characters valued like UPS ({@link charValue}), weights 2, 1, 2, ...
+ * from the left over the 15-character serial, and the check is `sum % 10`
+ * (no complement).
+ */
+export function evriCheckDigit(serial: string): number {
+  let sum = 0;
+  for (let i = 0; i < serial.length; i++) sum += charValue(serial[i]) * (i % 2 === 0 ? 2 : 1);
+  return sum % 10;
+}
+
+/**
+ * SF Express: `digits` is the 12-digit number or the 13 digits after "SF",
+ * check digit included. The first 3 digits (area code) and the check digit
+ * are skipped; the rest is read from the right with weights 1, 3, 5, 7, ...,
+ * and each product contributes its tens digit plus its units digit.
+ */
+export function sfCheckDigit(digits: string): number {
+  const core = digits.slice(3, -1);
+  let sum = 0;
+  for (let i = core.length - 1, w = 1; i >= 0; i--, w += 2) {
+    const p = charValue(core[i]) * w;
+    sum += (Math.floor(p / 10) % 10) + (p % 10);
+  }
+  return (10 - (sum % 10)) % 10;
+}
+
+const ALNUM36 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+/**
+ * ISO/IEC 7064 MOD 37,36 check character (DPD, Chronopost, La Poste 86x-88x):
+ * p = 36; for each character s = (p + value) % 36 (0 -> 36), p = 2s % 37;
+ * the check character is the one whose value is (37 - p) % 36.
+ */
+export function iso7064Mod3736CheckChar(serial: string): string {
+  let p = 36;
+  for (const c of serial) {
+    let s = (p + ALNUM36.indexOf(c)) % 36;
+    if (s === 0) s = 36;
+    p = (2 * s) % 37;
+  }
+  return ALNUM36[(37 - p) % 36];
+}
+
+const CORREOS_LETTERS = "TRWAGMYFPDXBNJZSQVHLCKE";
+
+/** Correos (Spain) check letter: sum of the character codes of the serial, mod 23, into "TRWAGMYF...". */
+export function correosCheckLetter(serial: string): string {
+  let sum = 0;
+  for (let i = 0; i < serial.length; i++) sum += serial.charCodeAt(i);
+  return CORREOS_LETTERS[sum % 23];
 }

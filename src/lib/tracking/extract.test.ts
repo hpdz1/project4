@@ -126,9 +126,9 @@ describe("short / all-digit formats need context", () => {
   });
 
   it("requires the carrier itself for generic no-check-digit formats", () => {
-    expect(numbers("DHL tracking: 60120172242323")).toEqual(["dhl:60120172242323"]);
+    expect(numbers("DHL tracking: 60120172242323")).toEqual(["dhl_ecommerce:60120172242323"]);
     expect(numbers("Tracking: 60120172242323")).toEqual([]);
-    expect(numbers("Tracking: 60120172242323", "dhl")).toEqual(["dhl:60120172242323"]);
+    expect(numbers("Tracking: 60120172242323", "dhl")).toEqual(["dhl_ecommerce:60120172242323"]);
     expect(numbers("Package 60120172242323", "dhl")).toEqual([]); // hint but no keyword
     expect(numbers("Amazon tracking C1004444443")).toEqual(["amazon:C1004444443"]);
     expect(numbers("Tracking C1004444443")).toEqual([]);
@@ -341,7 +341,7 @@ describe("dedupe and order", () => {
     expect(findTrackingNumbers(text)).toEqual([
       {
         trackingNumber: "60120172242323",
-        carrier: "dhl",
+        carrier: "dhl_ecommerce",
         format: "DHL eCommerce (14 digits)",
         checksumValid: null,
       },

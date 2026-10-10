@@ -32,7 +32,7 @@ describe("tracking links per carrier", () => {
       "dhl:3318810025",
     ],
     ["http://www.dhl.com/en/express/tracking.html?brand=DHL&AWB=73891051146", "dhl:73891051146"],
-    ["https://webtrack.dhlecs.com/?trackingnumber=GM2951173225174494", "dhl:GM2951173225174494"],
+    ["https://webtrack.dhlecs.com/?trackingnumber=GM2951173225174494", "dhl_ecommerce:GM2951173225174494"],
     // Amazon
     ["https://track.amazon.com/tracking/TBA305938274011", "amazon:TBA305938274011"],
     // OnTrac / LaserShip
@@ -62,7 +62,7 @@ describe("tracking links per carrier", () => {
 
   it("accepts a DHL eCommerce 14-digit number only from a DHL link", () => {
     expect(numbers("https://www.dhl.com/us-en/home/tracking.html?tracking-id=60120172242323")).toEqual([
-      "dhl:60120172242323",
+      "dhl_ecommerce:60120172242323",
     ]);
   });
 });

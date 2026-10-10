@@ -2,55 +2,87 @@
  * Carrier programs users turn on once so carriers email them about packages.
  *
  * Facts come from the research notes (programs.md with its fact-check,
- * carrier-emails.md, forwarding.md, market-scan.md). URLs are the INDEXED /
- * DOCUMENTED ones; where only a deep link was unverified we use the base
- * page. Sender addresses are the ones seen in real carrier emails (or in the
- * Home Assistant "Mail and Packages" sender lists those notes cite). Exact
- * addresses rather than whole domains keep unrelated mail (account codes,
- * receipts) out of the forwarding filter.
+ * carrier-emails.md, forwarding.md, market-scan.md, and the worldwide/*.md
+ * country research). URLs are the INDEXED / DOCUMENTED ones; where only a
+ * deep link was unverified we use the base page. Sender addresses are the ones
+ * seen in real carrier emails (or in the Home Assistant "Mail and Packages"
+ * sender lists those notes cite). Exact addresses rather than whole domains
+ * keep unrelated mail (account codes, receipts) out of the forwarding filter;
+ * where the research found no exact address, a program lists none and says so.
+ *
+ * This file holds the US programs, the international ones (UPS, FedEx, DHL
+ * Express, Amazon) and the programs of the first countries we covered; the
+ * rest are in programs-europe.ts, programs-asia-pacific.ts and
+ * programs-americas-mea.ts.
  */
-import type { CarrierId, ProgramId } from "@/lib/types";
+import type { ProgramId } from "@/lib/types";
+import type { Program } from "./program";
+import { AMERICAS_MEA_PROGRAMS } from "./programs-americas-mea";
+import { ASIA_PACIFIC_PROGRAMS } from "./programs-asia-pacific";
+import { EUROPE_PROGRAMS } from "./programs-europe";
 
-export interface Program {
-  id: ProgramId;
-  name: string;
-  operator: string;
-  carrier: CarrierId | null;
-  /** ISO 3166-1 alpha-2 codes where the program is offered (among the countries we cover). */
-  countries: string[];
-  /** address = shows everything headed to your verified address; account = tied to your login/email; per_package = one shipment at a time. */
-  kind: "address" | "account" | "per_package";
-  /** One plain sentence. */
-  shows: string;
-  cost: string;
-  signupUrl: string;
-  dashboardUrl: string | null;
-  /** How the program checks who you are, including mailed codes and waits. */
-  verification: string;
-  setupTime: string;
-  emailAlerts: {
-    /** Steps to turn on email alerts in the program (empty when it has none). */
-    howToEnable: string[];
-    /** Lowercase sender addresses to forward, for the default country. */
-    senders: string[];
-    /** Per-country sender lists that replace `senders` (e.g. amazon.co.uk in GB). */
-    sendersByCountry?: Partial<Record<string, string[]>>;
-  };
-  /** "full": we parse status, dates and shippers; "basic": we only pick up tracking numbers. */
-  parserSupport: "full" | "basic";
-  gotchas: string[];
-  guideSlug: "usps-informed-delivery" | "ups-my-choice" | "fedex-delivery-manager" | null;
-}
+export type { Program } from "./program";
 
-/** Countries where we list the international programs (UPS, FedEx, DHL Express, Amazon). */
-const INTERNATIONAL = ["US", "CA", "GB", "AU", "DE", "NL"];
+/**
+ * Where UPS My Choice is confirmed: the US, Canada and Australia, UPS's
+ * country pages (GB, ES, JP, SG, AU) and the 12 European countries of its
+ * 2014 launch. UPS says it reached about 112 countries in 2018 without
+ * listing them; elsewhere coverage mentions it as "check ups.com".
+ */
+export const UPS_MY_CHOICE_COUNTRIES: readonly string[] = [
+  "US", "CA", "GB", "AU", "DE", "NL", "AT", "BE", "DK", "FR", "IT", "PL", "ES", "SE", "CH", "JP", "SG",
+];
+
+/** Amazon marketplaces: country -> email domain and the sender local parts seen for it. */
+const AMAZON_MARKETPLACES: Readonly<Record<string, { domain: string; localParts?: string[] }>> = {
+  US: { domain: "amazon.com" },
+  CA: { domain: "amazon.ca", localParts: ["shipment-tracking", "order-update", "auto-confirm", "confirmation-commande"] },
+  MX: { domain: "amazon.com.mx" },
+  BR: { domain: "amazon.com.br" },
+  GB: { domain: "amazon.co.uk" },
+  IE: { domain: "amazon.ie" },
+  DE: {
+    domain: "amazon.de",
+    localParts: ["versandbestaetigung", "shipment-tracking", "order-update", "auto-confirm", "bestellbestaetigung"],
+  },
+  FR: { domain: "amazon.fr", localParts: ["confirmation-commande", "shipment-tracking", "order-update", "auto-confirm"] },
+  IT: { domain: "amazon.it", localParts: ["conferma-spedizione", "order-update", "shipment-tracking", "auto-confirm"] },
+  ES: { domain: "amazon.es", localParts: ["confirmar-envio", "shipment-tracking", "order-update", "auto-confirm"] },
+  NL: { domain: "amazon.nl", localParts: ["verzending-volgen", "update-bestelling", "auto-bevestiging", "shipment-tracking"] },
+  BE: { domain: "amazon.com.be" },
+  SE: { domain: "amazon.se" },
+  PL: { domain: "amazon.pl" },
+  TR: { domain: "amazon.com.tr" },
+  AE: { domain: "amazon.ae" },
+  SA: { domain: "amazon.sa" },
+  EG: { domain: "amazon.eg" },
+  IN: { domain: "amazon.in" },
+  JP: { domain: "amazon.co.jp" },
+  AU: { domain: "amazon.com.au" },
+  SG: { domain: "amazon.sg" },
+};
+
+/** Countries with an Amazon marketplace (Amazon only emails the account that ordered). */
+export const AMAZON_COUNTRIES: readonly string[] = Object.keys(AMAZON_MARKETPLACES);
 
 function amazonSenders(domain: string, localParts = ["shipment-tracking", "order-update", "auto-confirm"]): string[] {
   return localParts.map((local) => `${local}@${domain}`);
 }
 
-/** Keyed by id so the compiler checks every ProgramId has exactly one entry. */
-export const PROGRAMS_BY_ID: Readonly<Record<ProgramId, Program>> = {
+const AMAZON_SENDERS_BY_COUNTRY: Partial<Record<string, string[]>> = Object.fromEntries(
+  Object.entries(AMAZON_MARKETPLACES)
+    .filter(([country]) => country !== "US")
+    .map(([country, { domain, localParts }]) => [country, amazonSenders(domain, localParts)]),
+);
+
+const AMAZON_HOME_BY_COUNTRY: Partial<Record<string, string>> = Object.fromEntries(
+  Object.entries(AMAZON_MARKETPLACES)
+    .filter(([country]) => country !== "US")
+    .map(([country, { domain }]) => [country, `https://www.${domain}/`]),
+);
+
+/** The US programs, the international ones and the first countries we covered, keyed by id. */
+const CORE_PROGRAMS: Readonly<Record<ProgramId, Program>> = {
   usps_informed_delivery: {
     id: "usps_informed_delivery",
     name: "USPS Informed Delivery",
@@ -99,12 +131,13 @@ export const PROGRAMS_BY_ID: Readonly<Record<ProgramId, Program>> = {
     name: "UPS My Choice",
     operator: "UPS",
     carrier: "ups",
-    countries: [...INTERNATIONAL],
+    countries: [...UPS_MY_CHOICE_COUNTRIES],
     kind: "address",
     shows:
       "Incoming UPS packages for your address, including ones you didn't order, with alerts and an estimated delivery window.",
     cost: "Free basic membership; optional Premium (about $19.99/yr in the US) adds more delivery changes",
     signupUrl: "https://www.ups.com/us/en/track/ups-my-choice",
+    signupUrlByCountry: { CA: "https://www.ups.com/ca/en/track/ups-my-choice" },
     dashboardUrl: "https://wwwapps.ups.com/mcdp",
     verification:
       "You create a ups.com account and confirm your email with a code. Where UPS needs more proof, it mails an activation code to the address in a welcome letter (about 7–14 days; valid for 45 days).",
@@ -135,12 +168,13 @@ export const PROGRAMS_BY_ID: Readonly<Record<ProgramId, Program>> = {
     name: "FedEx Delivery Manager",
     operator: "FedEx",
     carrier: "fedex",
-    countries: [...INTERNATIONAL],
+    countries: ["US", "CA"],
     kind: "address",
     shows:
       "FedEx Express, Ground and Home Delivery packages headed to your home, with alerts and no tracking numbers needed.",
     cost: "Free (some delivery changes cost extra)",
     signupUrl: "https://www.fedex.com/en-us/delivery-manager.html",
+    signupUrlByCountry: { CA: "https://www.fedex.com/en-ca/delivery-manager/personal.html" },
     dashboardUrl: null,
     verification:
       "You create a fedex.com account and FedEx checks that your name is linked to the address, usually automatically or with a code texted to your phone. Sometimes it mails a postcard with a 6-digit PIN instead.",
@@ -168,17 +202,56 @@ export const PROGRAMS_BY_ID: Readonly<Record<ProgramId, Program>> = {
     guideSlug: "fedex-delivery-manager",
   },
 
+  fedex_delivery_manager_intl: {
+    id: "fedex_delivery_manager_intl",
+    name: "FedEx Delivery Manager (international)",
+    operator: "FedEx",
+    carrier: "fedex",
+    countries: ["GB", "DE", "AT", "CH", "BE", "ES", "PT", "AR", "CL", "CO", "CR", "DO", "EC", "GT", "PA", "PE"],
+    worldwide: true,
+    kind: "per_package",
+    shows:
+      "Outside the US and Canada, FedEx emails or texts you a link to manage one delivery at a time, but only when the shipper has switched Delivery Manager on; you can't sign up for it yourself.",
+    cost: "Free",
+    signupUrl: "https://www.fedex.com/en-gb/shipping-tools/deliverymanager.html",
+    signupUrlByCountry: {
+      DE: "https://www.fedex.com/de-de/shipping-tools/deliverymanager.html",
+      AT: "https://www.fedex.com/de-at/shipping-tools/deliverymanager.html",
+      CH: "https://www.fedex.com/de-ch/shipping-tools/deliverymanager.html",
+      BE: "https://www.fedex.com/en-be/shipping-tools/deliverymanager.html",
+      ES: "https://www.fedex.com/es-es/shipping-tools/deliverymanager.html",
+      PT: "https://www.fedex.com/pt-pt/shipping-tools/deliverymanager.html",
+      EC: "https://www.fedex.com/es-ec/shipping/delivery-manager.html",
+    },
+    dashboardUrl: null,
+    verification: "None: FedEx sends you a link when the shipper turns it on.",
+    setupTime: "Nothing to set up",
+    emailAlerts: {
+      howToEnable: [
+        "There's no setting to turn on: FedEx emails you when the shipper switches Delivery Manager on for your shipment.",
+      ],
+      senders: ["trackingupdates@fedex.com", "noreply@fedex.com"],
+    },
+    parserSupport: "basic",
+    gotchas: [
+      "Recipients can't register for the international version; FedEx offers it in about 90 countries where shippers use it.",
+      "It isn't address-based, so other FedEx parcels only show up if you get an email about them.",
+    ],
+    guideSlug: null,
+  },
+
   amazon_orders: {
     id: "amazon_orders",
     name: "Amazon order emails",
     operator: "Amazon",
     carrier: "amazon",
-    countries: [...INTERNATIONAL],
+    countries: [...AMAZON_COUNTRIES],
     kind: "account",
     shows:
       "Shipping updates for orders placed on your own Amazon account, whichever carrier delivers them, but not packages other people send you.",
     cost: "Free with an Amazon account",
     signupUrl: "https://www.amazon.com/gp/help/customer/display.html?nodeId=GENAFPTNLHV7ZACW",
+    signupUrlByCountry: AMAZON_HOME_BY_COUNTRY,
     dashboardUrl: "https://www.amazon.com/gp/css/order-history",
     verification: "Nothing extra: these are emails Amazon already sends to the address on your account.",
     setupTime: "About 2 minutes",
@@ -189,13 +262,7 @@ export const PROGRAMS_BY_ID: Readonly<Record<ProgramId, Program>> = {
         "If your household shares several Amazon accounts, set up forwarding from each account's mailbox.",
       ],
       senders: amazonSenders("amazon.com"),
-      sendersByCountry: {
-        CA: amazonSenders("amazon.ca"),
-        GB: amazonSenders("amazon.co.uk"),
-        AU: amazonSenders("amazon.com.au"),
-        DE: amazonSenders("amazon.de", ["versandbestaetigung", "shipment-tracking", "order-update", "auto-confirm"]),
-        NL: amazonSenders("amazon.nl", ["verzending-volgen", "update-bestelling", "auto-bevestiging", "shipment-tracking"]),
-      },
+      sendersByCountry: AMAZON_SENDERS_BY_COUNTRY,
     },
     parserSupport: "full",
     gotchas: [
@@ -212,7 +279,8 @@ export const PROGRAMS_BY_ID: Readonly<Record<ProgramId, Program>> = {
     name: "DHL On Demand Delivery",
     operator: "DHL Express",
     carrier: "dhl",
-    countries: [...INTERNATIONAL],
+    countries: ["US", "CA", "GB", "AU", "DE", "NL"],
+    worldwide: true,
     kind: "per_package",
     shows:
       "Alerts for DHL Express shipments coming to you, sent one shipment at a time and matched best when the shipper has your email or mobile number.",
@@ -234,6 +302,7 @@ export const PROGRAMS_BY_ID: Readonly<Record<ProgramId, Program>> = {
     gotchas: [
       "It covers DHL Express only. In the US, DHL eCommerce parcels are handed to USPS for delivery, so look for them in Informed Delivery.",
       "It isn't address-based: a shipment may not appear if the shipper didn't use your email or mobile number.",
+      "DHL offers it in more than 150 countries: pick your country when you sign up.",
     ],
     guideSlug: null,
   },
@@ -477,16 +546,55 @@ export const PROGRAMS_BY_ID: Readonly<Record<ProgramId, Program>> = {
   },
 };
 
-/** Every program, in display order. */
-export const PROGRAMS: Program[] = Object.values(PROGRAMS_BY_ID);
+/** Every program: the core ones, then Europe, Asia-Pacific, and the Americas, Middle East and Africa. */
+export const PROGRAMS: Program[] = [
+  ...Object.values(CORE_PROGRAMS),
+  ...EUROPE_PROGRAMS,
+  ...ASIA_PACIFIC_PROGRAMS,
+  ...AMERICAS_MEA_PROGRAMS,
+];
+
+/** Every program keyed by id. Ids are data (ProgramId is a string); the API validates against these keys. */
+export const PROGRAMS_BY_ID: Readonly<Record<ProgramId, Program>> = Object.fromEntries(
+  PROGRAMS.map((program) => [program.id, program]),
+);
 
 /** The program with this id, or null for an unknown id. */
 export function getProgram(id: string): Program | null {
-  return Object.prototype.hasOwnProperty.call(PROGRAMS_BY_ID, id) ? PROGRAMS_BY_ID[id as ProgramId] : null;
+  return typeof id === "string" && Object.prototype.hasOwnProperty.call(PROGRAMS_BY_ID, id) ? PROGRAMS_BY_ID[id] : null;
+}
+
+function countryKey(country: string | null | undefined): string | null {
+  return typeof country === "string" && country.trim() ? country.trim().toUpperCase() : null;
 }
 
 /** Sender addresses to forward for one program, using the country-specific list when there is one. */
 export function programSenders(program: Program, country?: string | null): string[] {
-  const byCountry = country ? program.emailAlerts.sendersByCountry?.[country.trim().toUpperCase()] : undefined;
+  const key = countryKey(country);
+  const byCountry = key ? program.emailAlerts.sendersByCountry?.[key] : undefined;
   return byCountry ?? program.emailAlerts.senders;
+}
+
+/** The program's sign-up page for `country` (e.g. PostNord's Danish page), else its default page. */
+export function programSignupUrl(program: Program, country?: string | null): string {
+  const key = countryKey(country);
+  return (key ? program.signupUrlByCountry?.[key] : undefined) ?? program.signupUrl;
+}
+
+/** True when the program is confirmed in `country` or offered nearly everywhere (DHL Express, FedEx international). */
+export function programOffersIn(program: Program, country: string): boolean {
+  const key = countryKey(country);
+  return program.worldwide === true || (key !== null && program.countries.includes(key));
+}
+
+/**
+ * A copy of the program as it applies in `country`: the country's sign-up
+ * page and sender list replace the defaults, so UI code can use `signupUrl`
+ * and `emailAlerts.senders` as they are.
+ */
+export function localizeProgram(program: Program, country: string | null | undefined): Program {
+  const signupUrl = programSignupUrl(program, country);
+  const senders = programSenders(program, country);
+  if (signupUrl === program.signupUrl && senders === program.emailAlerts.senders) return program;
+  return { ...program, signupUrl, emailAlerts: { ...program.emailAlerts, senders: [...senders] } };
 }

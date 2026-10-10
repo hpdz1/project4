@@ -2,12 +2,12 @@ import { describe, expect, it } from "vitest";
 import { CARRIER_NAMES, carrierFromHost, carrierFromWord, carriersMentioned, trackingUrl } from "./carriers";
 
 describe("CARRIER_NAMES", () => {
-  it("names every carrier id", () => {
-    expect(CARRIER_NAMES).toEqual({
+  it("keeps the US carriers' names", () => {
+    expect(CARRIER_NAMES).toMatchObject({
       usps: "USPS",
       ups: "UPS",
       fedex: "FedEx",
-      dhl: "DHL",
+      dhl: "DHL Express",
       amazon: "Amazon",
       ontrac: "OnTrac",
       unknown: "Unknown carrier",
@@ -56,7 +56,7 @@ describe("carrierFromHost", () => {
     ["wwwapps.ups.com", "ups"],
     ["www.fedex.com", "fedex"],
     ["www.dhl.com", "dhl"],
-    ["webtrack.dhlecs.com", "dhl"],
+    ["webtrack.dhlecs.com", "dhl_ecommerce"],
     ["track.amazon.com", "amazon"],
     ["www.ontrac.com", "ontrac"],
     ["t.lasership.com", "ontrac"],

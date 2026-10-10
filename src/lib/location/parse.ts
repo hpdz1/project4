@@ -1,4 +1,12 @@
-import { SUPPORTED_COUNTRY_CODES, countryName, normalizeCountryCode } from "./countries";
+import {
+  COUNTRIES,
+  OTHER_COUNTRY_CODE,
+  SUPPORTED_COUNTRY_CODES,
+  USPS_SERVED_COUNTRY_CODES,
+  countryName,
+  normalizeCountryCode,
+} from "./countries";
+import { DISTINCTIVE_POSTCODES, countryHasNoPostcodes, postcodeFormat, postcodeSpec, type PostcodeSpec } from "./postcodes";
 import {
   AU_LOOKUP,
   CA_LOOKUP,
@@ -340,7 +348,32 @@ const matchNl: PostcodeMatcher = (a, b) => {
 
 const matchAu: PostcodeMatcher = (a) => (/^\d{4}$/.test(a) ? { value: a, length: 1 } : null);
 
-const matchDe: PostcodeMatcher = (a) => (/^\d{5}$/.test(a) ? { value: a, length: 1 } : null);
+/** Matcher for a pattern-table format: two tokens ("113 51") first, then one ("11351", "00-950"). */
+function specMatcher(spec: PostcodeSpec): PostcodeMatcher {
+  return (a, b) => {
+    if (b) {
+      const pair = spec.pattern.exec(`${a} ${b}`);
+      if (pair) return { value: spec.format(pair), length: 2 };
+    }
+    const single = spec.pattern.exec(a);
+    return single ? { value: spec.format(single), length: 1 } : null;
+  };
+}
+
+/** Matcher that only accepts one exact shape, used to suggest a country (BR, PT, JP, PL, IE). */
+function shapeMatcher(pattern: RegExp): PostcodeMatcher {
+  return (a, b) => {
+    if (b && pattern.test(`${a} ${b}`)) return { value: `${a} ${b}`, length: 2 };
+    return pattern.test(a) ? { value: a, length: 1 } : null;
+  };
+}
+
+/** Postcode-like token for countries whose format we don't know: 3–10 characters with at least 3 digits. */
+const LOOSE_POSTCODE_RE = /^(?=(?:[A-Z-]*\d){3})[A-Z0-9]{2,8}(?:-[A-Z0-9]{2,5})?$/;
+const ORDINAL_RE = /^\d+(?:ST|ND|RD|TH)$/;
+
+const matchLoose: PostcodeMatcher = (a) =>
+  a.length <= 10 && LOOSE_POSTCODE_RE.test(a) && !ORDINAL_RE.test(a) ? { value: a, length: 1 } : null;
 
 /** The last postcode in the input that `accept` doesn't veto. */
 function findLastPostcode(toks: Tok[], matcher: PostcodeMatcher, accept?: (span: Span) => boolean): Span | null {
@@ -511,6 +544,79 @@ const COUNTRY_ALIASES: ReadonlyMap<string, string> = new Map([
   ["SINGAPORE", "SG"],
 ]);
 
+/** The words of a name as tokenize() would key them ("Côte d’Ivoire" -> "COTE DIVOIRE"). */
+function nameKey(name: string): string {
+  return name
+    .split(/\s+/)
+    .map(tokenKey)
+    .filter(Boolean)
+    .join(" ");
+}
+
+/**
+ * Other names people write as the last part of an address: common English
+ * forms the CLDR name doesn't use, and names in the country's own language.
+ */
+const EXTRA_COUNTRY_NAMES: readonly (readonly [string, string])[] = [
+  ["UAE", "AE"],
+  ["U A E", "AE"],
+  ["KSA", "SA"],
+  ["BOSNIA AND HERZEGOVINA", "BA"],
+  ["HONG KONG", "HK"],
+  ["MACAU", "MO"],
+  ["MACAO", "MO"],
+  ["MYANMAR", "MM"],
+  ["BURMA", "MM"],
+  ["TURKEY", "TR"],
+  ["CZECH REPUBLIC", "CZ"],
+  ["KOREA", "KR"],
+  ["REPUBLIC OF KOREA", "KR"],
+  ["VIET NAM", "VN"],
+  ["IVORY COAST", "CI"],
+  ["SWAZILAND", "SZ"],
+  ["MACEDONIA", "MK"],
+  ["CABO VERDE", "CV"],
+  ["WALES", "GB"],
+  ["ESPANA", "ES"],
+  ["ITALIA", "IT"],
+  ["SCHWEIZ", "CH"],
+  ["SUISSE", "CH"],
+  ["SVIZZERA", "CH"],
+  ["OSTERREICH", "AT"],
+  ["BELGIQUE", "BE"],
+  ["BELGIE", "BE"],
+  ["SVERIGE", "SE"],
+  ["NORGE", "NO"],
+  ["DANMARK", "DK"],
+  ["SUOMI", "FI"],
+  ["POLSKA", "PL"],
+  ["CESKO", "CZ"],
+  ["CESKA REPUBLIKA", "CZ"],
+  ["SLOVENSKO", "SK"],
+  ["MAGYARORSZAG", "HU"],
+  ["HRVATSKA", "HR"],
+  ["SLOVENIJA", "SI"],
+  ["EESTI", "EE"],
+  ["LATVIJA", "LV"],
+  ["LIETUVA", "LT"],
+  ["EIRE", "IE"],
+  ["BRASIL", "BR"],
+  ["NIPPON", "JP"],
+  ["NIHON", "JP"],
+];
+
+/**
+ * Every country name, matched only when it is a whole comma-separated part at
+ * the end of a multi-part address ("…, 75001 Paris, France"). Georgia is left
+ * out: as a part of its own it is far more often the US state.
+ */
+const COUNTRY_NAMES_AS_PART: ReadonlyMap<string, string> = new Map([
+  ...COUNTRIES.filter((c) => c.code !== OTHER_COUNTRY_CODE && c.code !== "GE").map(
+    (c) => [nameKey(c.name), c.code] as const,
+  ),
+  ...EXTRA_COUNTRY_NAMES,
+]);
+
 /** Remove a trailing country name; returns its code. */
 function stripTrailingCountry(toks: Tok[]): { toks: Tok[]; country: string | null } {
   for (let n = Math.min(4, toks.length); n >= 1; n--) {
@@ -518,6 +624,17 @@ function stripTrailingCountry(toks: Tok[]): { toks: Tok[]; country: string | nul
     if (words.some((w) => w.seg !== words[0].seg)) continue;
     const code = COUNTRY_ALIASES.get(words.map((w) => w.key).join(" "));
     if (code) return { toks: toks.slice(0, toks.length - n), country: code };
+  }
+  const last = toks[toks.length - 1];
+  if (last && toks[0].seg !== last.seg) {
+    const start = segmentStart(toks, toks.length - 1);
+    const code = COUNTRY_NAMES_AS_PART.get(
+      toks
+        .slice(start)
+        .map((t) => t.key)
+        .join(" "),
+    );
+    if (code) return { toks: toks.slice(0, start), country: code };
   }
   return { toks, country: null };
 }
@@ -540,6 +657,9 @@ function detectCountry(toks: Tok[]): string | null {
   const au = findLastPostcode(toks, matchAu, (span) => regionBefore(toks, span.start, AU_LOOKUP) !== null);
   if (au) return "AU";
   if (findLastPostcode(toks, matchNl, nlIsPlausible(toks))) return "NL";
+  for (const { country, pattern } of DISTINCTIVE_POSTCODES) {
+    if (findLastPostcode(toks, shapeMatcher(pattern), notAfterUnitWord(toks))) return country;
+  }
   return null;
 }
 
@@ -654,7 +774,8 @@ function partsWithout(toks: Tok[], span: Span | null): Tok[][] {
   return partsBefore(kept, kept.length);
 }
 
-function parseGb(toks: Tok[]): CountryParse {
+/** UK and the Crown Dependencies / Gibraltar, which use UK-style postcodes. */
+function parseGb(toks: Tok[], example = "SW1A 1AA"): CountryParse {
   const postcode = findLastPostcode(toks, matchGb);
   const locality = postcode ? localityBefore(toks, postcode.start) : null;
   const parts = partsWithout(toks, postcode).filter((part) => part[0].seg !== locality?.seg);
@@ -663,26 +784,49 @@ function parseGb(toks: Tok[]): CountryParse {
     region: null,
     city: locality?.city ?? null,
     hasStreet: Boolean(locality?.hadStreet) || genericHasStreet(parts),
-    warnings: postcode ? [] : ["We couldn't find a postcode. Add it (for example SW1A 1AA) so we can check coverage."],
+    warnings: postcode ? [] : [`We couldn't find a postcode. Add it (for example ${example}) so we can check coverage.`],
   };
 }
 
-/** Netherlands and Germany: "street number, POSTCODE City". */
+/** "street number, POSTCODE City" (also finds "City POSTCODE"): the Netherlands, Germany and most of the world. */
 function parsePostcodeFirst(toks: Tok[], matcher: PostcodeMatcher, missing: string): CountryParse {
   const postcode = findLastPostcode(toks, matcher, notAfterUnitWord(toks));
-  let city = postcode ? localityAfter(toks, postcode) : null;
-  if (!city && postcode) city = localityBefore(toks, postcode.start)?.city ?? null;
-  const parts = partsWithout(toks, postcode).filter((part) => !(city && cityText(part) === city));
-  return {
-    postalCode: postcode?.value ?? null,
-    region: null,
-    city,
-    hasStreet: genericHasStreet(parts),
-    warnings: postcode ? [] : [missing],
-  };
+  if (!postcode) return { ...parseNoPostcode(toks), warnings: [missing] };
+  return { region: null, warnings: [], ...aroundPostcode(toks, postcode) };
 }
 
-function parseOther(toks: Tok[]): CountryParse {
+/** "a postcode" / "an Eircode". */
+function withIndefiniteArticle(label: string): string {
+  return `${/^[aeiou]/i.test(label) ? "an" : "a"} ${label}`;
+}
+
+/**
+ * Countries whose format we don't know: keep a postcode-like token only when it
+ * clearly isn't part of the street (not in the first of several comma-separated
+ * parts, not after "Apt" / "Box"), or when it is all the user typed. Never warns.
+ */
+function parseLoose(toks: Tok[]): CountryParse {
+  const parts = partsBefore(toks, toks.length);
+  const single = parts.length === 1 && toks.length === 1;
+  const afterUnit = notAfterUnitWord(toks);
+  const postcode = findLastPostcode(
+    toks,
+    matchLoose,
+    (span) => single || (toks[span.start].seg !== toks[0].seg && afterUnit(span)),
+  );
+  return postcode ? { region: null, warnings: [], ...aroundPostcode(toks, postcode) } : parseNoPostcode(toks);
+}
+
+/** Postcode, city (after the postcode, else before it) and street flag. */
+function aroundPostcode(toks: Tok[], postcode: Span): Pick<CountryParse, "postalCode" | "city" | "hasStreet"> {
+  let city = localityAfter(toks, postcode);
+  if (!city) city = localityBefore(toks, postcode.start)?.city ?? null;
+  const parts = partsWithout(toks, postcode).filter((part) => !(city && cityText(part) === city));
+  return { postalCode: postcode.value, city, hasStreet: genericHasStreet(parts) };
+}
+
+/** Countries without postcodes (UAE, Hong Kong…): nothing to find, nothing to warn about. */
+function parseNoPostcode(toks: Tok[]): CountryParse {
   return {
     postalCode: null,
     region: null,
@@ -693,6 +837,7 @@ function parseOther(toks: Tok[]): CountryParse {
 }
 
 function parseFor(country: string, toks: Tok[]): CountryParse {
+  if (USPS_SERVED_COUNTRY_CODES.has(country)) return parseUs(toks);
   switch (country) {
     case "US":
       return parseUs(toks);
@@ -702,18 +847,64 @@ function parseFor(country: string, toks: Tok[]): CountryParse {
       return parseAu(toks);
     case "GB":
       return parseGb(toks);
+    case "GG":
+    case "JE":
+    case "IM":
+    case "GI":
+      return parseGb(toks, postcodeFormat(country).example ?? "SW1A 1AA");
     case "NL":
       return parsePostcodeFirst(toks, matchNl, "We couldn't find a postcode. Add it (for example 1012 AB) so we can check coverage.");
-    case "DE":
-      return parsePostcodeFirst(toks, matchDe, "We couldn't find a postcode. Add your 5-digit Postleitzahl so we can check coverage.");
-    default:
-      return parseOther(toks);
+    case "DE": {
+      const spec = postcodeSpec("DE");
+      if (spec) {
+        return parsePostcodeFirst(
+          toks,
+          specMatcher(spec),
+          "We couldn't find a postcode. Add your 5-digit Postleitzahl so we can check coverage.",
+        );
+      }
+      break;
+    }
+    case OTHER_COUNTRY_CODE:
+      return parseNoPostcode(toks);
   }
+  if (countryHasNoPostcodes(country)) return parseNoPostcode(toks);
+  const spec = postcodeSpec(country);
+  if (spec) {
+    const { label } = postcodeFormat(country);
+    return parsePostcodeFirst(
+      toks,
+      specMatcher(spec),
+      `We couldn't find ${withIndefiniteArticle(label)}. Add it if you have one (for example ${spec.example}).`,
+    );
+  }
+  return parseLoose(toks);
+}
+
+/** "the United States", "the Netherlands", but "Germany". */
+function countryWithArticle(name: string): string {
+  return /^(?:United |Netherlands$|Philippines$|Bahamas$|Gambia$|Maldives$)|Republic$|Islands$/.test(name)
+    ? `the ${name}`
+    : name;
+}
+
+/** The US and the territories USPS serves are one postal area: never suggest switching between them. */
+function samePostalArea(a: string, b: string): boolean {
+  const usps = (code: string) => code === "US" || USPS_SERVED_COUNTRY_CODES.has(code);
+  return a === b || (usps(a) && usps(b));
 }
 
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
+
+/** What to say when there is nothing to parse. */
+function emptyInputWarning(country: string): string {
+  if (country === "US") return "Enter your address or ZIP code.";
+  if (country === OTHER_COUNTRY_CODE) return "Enter your address or postcode.";
+  const format = postcodeFormat(country);
+  return format.usesPostcodes ? `Enter your address or ${format.label}.` : "Enter your address.";
+}
 
 /**
  * Read the country, ZIP / postcode, state / province and city from a one-line
@@ -722,8 +913,15 @@ function parseFor(country: string, toks: Tok[]): CountryParse {
  *
  * The country comes from `countryHint` when given (e.g. a country picker),
  * else from a trailing country name, else from the postcode's shape (Canada,
- * UK, Australia with a state, Netherlands), else "US". A bare 5-digit number
- * is only treated as German with `countryHint` "DE" (or a typed "Germany").
+ * UK, Australia with a state, Netherlands, then the distinctive Brazilian,
+ * Portuguese, Japanese, Polish and Irish formats), else "US". A bare 5-digit
+ * number is only treated as German, French etc. with a `countryHint` (or a
+ * typed country name).
+ *
+ * Postcodes are normalized to the national written form ("113 51", "00-950",
+ * "100-0001", "D02 X285"). For countries whose format we don't know, a
+ * postcode-like token is kept only when it clearly isn't part of the street,
+ * and no warnings are added.
  *
  * Never throws; problems are reported in `warnings`.
  *
@@ -745,15 +943,17 @@ export function parseLocation(input: string, countryHint?: string): ParsedLocati
       region: null,
       city: null,
       hasStreet: false,
-      warnings: [country === "US" ? "Enter your address or ZIP code." : "Enter your address or postcode."],
+      warnings: [emptyInputWarning(country)],
     };
   }
 
   const parsed = parseFor(country, toks);
   const warnings = [...parsed.warnings];
-  if (detected && detected !== country && SUPPORTED_COUNTRY_CODES.has(detected)) {
-    const name = countryName(detected) ?? detected;
-    warnings.push(`This looks like an address in ${name}. Choose ${name} as your country if that's right.`);
+  if (detected && !samePostalArea(detected, country) && SUPPORTED_COUNTRY_CODES.has(detected)) {
+    const name = countryName(detected);
+    warnings.push(
+      `This looks like an address in ${countryWithArticle(name)}. Choose ${name} as your country if that's right.`,
+    );
   }
   return {
     country,

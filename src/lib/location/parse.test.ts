@@ -307,29 +307,173 @@ describe("parseLocation: other countries", () => {
     expect(parseLocation("Berlin", "DE").warnings[0]).toContain("postcode");
   });
 
-  it("passes other countries through without guessing", () => {
+  it("reads other countries' postcodes with a hint or a typed country name", () => {
     expect(parseLocation("12 Rue de Rivoli, 75001 Paris", "FR")).toEqual({
       country: "FR",
-      postalCode: null,
+      postalCode: "75001",
       region: null,
-      city: null,
+      city: "Paris",
       hasStreet: true,
       warnings: [],
     });
-    expect(parseLocation("anything", OTHER_COUNTRY_CODE)).toMatchObject({ country: "ZZ", warnings: [] });
+    expect(parseLocation("anything", OTHER_COUNTRY_CODE)).toMatchObject({ country: "ZZ", postalCode: null, warnings: [] });
     expect(parseLocation("10 Rue de Rivoli, 75001 Paris, France")).toEqual({
       country: "FR",
+      postalCode: "75001",
+      region: null,
+      city: "Paris",
+      hasStreet: true,
+      warnings: [],
+    });
+    // Every country is in the picker now, so a typed country that disagrees with the picker is pointed out.
+    expect(parseLocation("10 Rue de Rivoli, 75001 Paris, France", "US").warnings).toEqual([
+      expect.stringContaining(NO_ZIP),
+      "This looks like an address in France. Choose France as your country if that's right.",
+    ]);
+    expect(parseLocation("Belfast BT1 1AA, Northern Ireland")).toMatchObject({ country: "GB", postalCode: "BT1 1AA" });
+  });
+});
+
+describe("parseLocation: worldwide postcodes", () => {
+  it.each([
+    ["Bahnhofstrasse 10, 8001 Zürich", "CH", "8001", "Zürich"],
+    ["Stephansplatz 1, A-1010 Wien", "AT", "1010", "Wien"],
+    ["Rue Neuve 1, 1000 Bruxelles", "BE", "1000", "Bruxelles"],
+    ["Strøget 1, DK-1050 København", "DK", "1050", "København"],
+    ["Karl Johans gate 1, 0154 Oslo", "NO", "0154", "Oslo"],
+    ["Drottninggatan 1, 111 51 Stockholm", "SE", "111 51", "Stockholm"],
+    ["Drottninggatan 1, 11151 Stockholm", "SE", "111 51", "Stockholm"],
+    ["Mannerheimintie 1, 00100 Helsinki", "FI", "00100", "Helsinki"],
+    ["ul. Marszałkowska 1, 00-624 Warszawa", "PL", "00-624", "Warszawa"],
+    ["Marszałkowska 1, 00624 Warszawa", "PL", "00-624", "Warszawa"],
+    ["Avenida da Liberdade 1, 1250-096 Lisboa", "PT", "1250-096", "Lisboa"],
+    ["Calle Mayor 1, 28013 Madrid", "ES", "28013", "Madrid"],
+    ["Via del Corso 1, 00186 Roma", "IT", "00186", "Roma"],
+    ["Václavské náměstí 1, 110 00 Praha", "CZ", "110 00", "Praha"],
+    ["Ermou 1, 105 63 Athens", "GR", "105 63", "Athens"],
+    ["1 O'Connell Street, Dublin 1, D01 F5P2", "IE", "D01 F5P2", null],
+    ["〒100-0001 東京都千代田区千代田1-1", "JP", "100-0001", null],
+    ["Avenida Paulista 1000, São Paulo, SP 01310-100", "BR", "01310-100", null],
+    ["Avenida Paulista 1000, 01310100 São Paulo", "BR", "01310-100", "São Paulo"],
+    ["12 MG Road, Bengaluru 560001", "IN", "560001", "Bengaluru"],
+    ["12 MG Road, Bengaluru 560 001", "IN", "560001", "Bengaluru"],
+    ["Reforma 1, Cuauhtémoc, 06600 Ciudad de México", "MX", "06600", "Ciudad de México"],
+    ["세종대로 209, 03172", "KR", "03172", null],
+    ["建国路88号, 100022", "CN", "100022", null],
+    ["Brīvības iela 1, Rīga, LV-1050", "LV", "LV-1050", null],
+    ["Brīvības iela 1, Rīga 1050", "LV", "LV-1050", "Rīga"],
+    ["Gedimino pr. 1, 01103 Vilnius", "LT", "LT-01103", "Vilnius"],
+    ["Triq ir-Repubblika, Valletta VLT 1117", "MT", "VLT 1117", "Valletta"],
+    ["Herzl St 1, Tel Aviv 6100000", "IL", "6100000", "Tel Aviv"],
+    ["1 Queen St, Auckland 1010", "NZ", "1010", "Auckland"],
+    ["1 Long St, Cape Town 8001", "ZA", "8001", "Cape Town"],
+    ["1 Raffles Place, Singapore 048616", "SG", "048616", "Singapore"],
+    ["Tverskaya 1, Moskva 125009", "RU", "125009", "Moskva"],
+    ["Istiklal Cd. 1, 34433 Istanbul", "TR", "34433", "Istanbul"],
+  ])("%s (%s)", (input, country, postalCode, city) => {
+    const parsed = parseLocation(input, country);
+    expect(parsed).toMatchObject({ country, postalCode, region: null, warnings: [] });
+    if (city !== null) expect(parsed.city).toBe(city);
+  });
+
+  it("keeps the street out of the result", () => {
+    const parsed = parseLocation("Bahnhofstrasse 10, 8001 Zürich", "CH");
+    expect(parsed.hasStreet).toBe(true);
+    expect(JSON.stringify(parsed)).not.toMatch(/Bahnhof/);
+  });
+
+  it("asks for the postcode once, with a national example", () => {
+    expect(parseLocation("Zürich", "CH").warnings).toEqual([
+      "We couldn't find a postcode. Add it if you have one (for example 8001).",
+    ]);
+    expect(parseLocation("Bengaluru", "IN").warnings).toEqual([
+      "We couldn't find a PIN code. Add it if you have one (for example 110001).",
+    ]);
+    expect(parseLocation("Dublin", "IE").warnings).toEqual([
+      "We couldn't find an Eircode. Add it if you have one (for example D02 X285).",
+    ]);
+  });
+
+  it("doesn't look for postcodes where homes don't have them", () => {
+    expect(parseLocation("Villa 12, Street 5, Al Barsha, Dubai", "AE")).toEqual({
+      country: "AE",
       postalCode: null,
       region: null,
       city: null,
       hasStreet: true,
       warnings: [],
     });
-    // Only countries in the picker are suggested.
-    expect(parseLocation("10 Rue de Rivoli, 75001 Paris, France", "US").warnings).toEqual([
+    expect(parseLocation("Flat 3A, 12 Nathan Road, Kowloon", "HK")).toMatchObject({ postalCode: null, warnings: [] });
+    expect(parseLocation("", "AE").warnings).toEqual(["Enter your address."]);
+    expect(parseLocation("", "IN").warnings).toEqual(["Enter your address or PIN code."]);
+  });
+
+  it("takes a postcode-like token for countries without a known format, but never a street number", () => {
+    // Bolivia's neighbour Paraguay: no pattern table entry, so the loose rule applies.
+    expect(parseLocation("Calle Palma 123, 001001 Asunción", "PY")).toMatchObject({
+      postalCode: "001001",
+      city: "Asunción",
+      warnings: [],
+    });
+    expect(parseLocation("Calle Palma 1234, Asunción", "PY")).toMatchObject({ postalCode: null, warnings: [] });
+    expect(parseLocation("Calle Palma 1234 Asunción", "PY")).toMatchObject({ postalCode: null, warnings: [] });
+    expect(parseLocation("001001", "PY")).toMatchObject({ postalCode: "001001", warnings: [] });
+    expect(parseLocation("123 21st Street, Apt 4567", "PY")).toMatchObject({ postalCode: null, warnings: [] });
+  });
+
+  it("parses US territories as US ZIP codes and doesn't suggest switching to the US", () => {
+    expect(parseLocation("Calle Luna 123, San Juan, PR 00901", "PR")).toMatchObject({
+      country: "PR",
+      postalCode: "00901",
+      region: "PR",
+      city: "San Juan",
+      warnings: [],
+    });
+    expect(parseLocation("Hagatna 96910", "GU")).toMatchObject({ country: "GU", region: "GU", warnings: [] });
+    expect(parseLocation("Calle Luna 123, San Juan, Puerto Rico", "US").warnings).toEqual([
       expect.stringContaining(NO_ZIP),
     ]);
-    expect(parseLocation("Belfast BT1 1AA, Northern Ireland")).toMatchObject({ country: "GB", postalCode: "BT1 1AA" });
+  });
+
+  it("uses UK-style postcodes in the Crown Dependencies and Gibraltar", () => {
+    expect(parseLocation("1 Royal Square, St Helier JE2 3AB", "JE")).toMatchObject({ postalCode: "JE2 3AB" });
+    expect(parseLocation("Main Street, GX11 1AA", "GI")).toMatchObject({ postalCode: "GX11 1AA" });
+    expect(parseLocation("St Peter Port", "GG").warnings[0]).toContain("GY1 1AA");
+  });
+
+  it("suggests a country from distinctive postcode shapes when none was picked", () => {
+    expect(parseLocation("Avenida Paulista 1000, 01310-100 São Paulo").country).toBe("BR");
+    expect(parseLocation("Rua Augusta 1, 1100-048 Lisboa").country).toBe("PT");
+    expect(parseLocation("100-0001").country).toBe("JP");
+    expect(parseLocation("ul. Nowy Świat 1, 00-497 Warszawa").country).toBe("PL");
+    expect(parseLocation("1 Main Street, Dublin, D02 X285").country).toBe("IE");
+    expect(parseLocation("00-497 Warszawa", "DE").warnings).toEqual([
+      expect.stringContaining("Postleitzahl"),
+      "This looks like an address in Poland. Choose Poland as your country if that's right.",
+    ]);
+    // A Queens-style house number is still a US address.
+    expect(parseLocation("123-45 Queens Blvd, Forest Hills, NY 11375").country).toBe("US");
+  });
+
+  it("recognizes country names typed as the last part of the address", () => {
+    expect(parseLocation("Hauptplatz 1, 8010 Graz, Österreich")).toMatchObject({ country: "AT", postalCode: "8010" });
+    expect(parseLocation("Via Roma 1, 00184 Roma, Italia")).toMatchObject({ country: "IT", postalCode: "00184" });
+    expect(parseLocation("Shinjuku 1-1, Tokyo, Japan")).toMatchObject({ country: "JP" });
+    expect(parseLocation("Sheikh Zayed Rd, Dubai, UAE")).toMatchObject({ country: "AE", postalCode: null });
+    expect(parseLocation("Damrak 1, 1012 LG Amsterdam, the Netherlands")).toMatchObject({ country: "NL" });
+    expect(parseLocation("10 Main St, Cape Town, South Africa")).toMatchObject({ country: "ZA" });
+    // Only as a whole last part, and never "Georgia", which is usually the US state.
+    expect(parseLocation("100 Peachtree St, Atlanta, Georgia 30303").country).toBe("US");
+    expect(parseLocation("100 Peachtree St, Atlanta, Georgia").country).toBe("US");
+    expect(parseLocation("Santa Fe, New Mexico 87501").country).toBe("US");
+    expect(parseLocation("Lebanon").country).toBe("US");
+    expect(parseLocation("1 Main St, Springfield", "US").warnings).toEqual([expect.stringContaining(NO_ZIP)]);
+  });
+
+  it("says 'the' before country names that need it", () => {
+    expect(parseLocation("Damrak 1, 1012 LG Amsterdam", "BE").warnings).toContain(
+      "This looks like an address in the Netherlands. Choose Netherlands as your country if that's right.",
+    );
   });
 });
 
@@ -376,8 +520,8 @@ describe("parseLocation: garbage", () => {
 });
 
 describe("countries", () => {
-  it("lists supported countries plus Other", () => {
-    expect(COUNTRIES.map((c) => c.code)).toEqual(["US", "CA", "GB", "AU", "DE", "NL", "ZZ"]);
+  it("lists every country, sorted by name, plus Other", () => {
+    expect(COUNTRIES.length).toBeGreaterThan(240);
     expect(COUNTRIES.at(-1)).toEqual({ code: "ZZ", name: "Other" });
   });
 
