@@ -38,7 +38,9 @@ to track your package" phishing pattern.
   - Postmark inbound webhook → `POST /api/inbound/postmark` (HTTP basic auth).
   - Generic JSON (e.g. from the Cloudflare Email Worker in `workers/inbound-email`)
     → `POST /api/inbound/raw` (`Authorization: Bearer <INBOUND_SECRET>`).
-- Tests: Vitest (unit, `src/**/*.test.ts`), Playwright (e2e smoke, `e2e/`).
+- Tests: Vitest (unit, `src/**/*.test.ts`, `npm test`), Playwright (e2e smoke, `e2e/`,
+  `npm run test:e2e`: builds, then runs `next start` with `DEMO_MODE=1`, an inbound secret and a
+  fresh SQLite file at `.data/e2e.db`).
 
 ## Directory map
 
@@ -46,14 +48,16 @@ to track your package" phishing pattern.
 src/
   lib/
     types.ts              shared domain types (the contract between modules)
-    config.ts             env access (server-only values + public values)
+    site.ts               public (NEXT_PUBLIC_*) settings: site URL, contact email, AdSense ids
     tracking/             carrier detection, check digits, tracking URLs, text/URL extraction
     ingest/               inbound email normalization, forwarding helpers, classification, carrier parsers
     store/                Store interface, merge rules, memory + sqlite implementations
     dashboard.ts          pure: stored shipments -> DashboardResponse pieces
     location/             parse ZIP/postcode/state from free text; ZIP3 -> state table
     programs/             carrier program data, coverage by country/state, email-filter builders
-    server/               route-handler helpers: session cookies, rate limiting, origin checks, JSON errors
+    server/               route-handler helpers: env config (config.ts), session cookies, rate limiting,
+                          origin checks, JSON errors, the shared inbound pipeline
+    client/               browser-side helpers: typed API client, localStorage, formatting
   app/
     page.tsx              landing (address -> coverage -> "Set up my radar")
     setup/                one-time setup wizard (client)
@@ -88,10 +92,11 @@ export function findTrackingNumbers(text: string, opts?: { carrierHint?: Carrier
 ### `src/lib/ingest`
 
 ```ts
-export function fromPostmark(payload: unknown): InboundEmail;        // throws InboundPayloadError on bad input
-export function fromRawJson(payload: unknown): InboundEmail;         // generic JSON shape (see route)
+export function fromPostmark(payload: unknown, receivedAt?: Date): InboundEmail;  // throws InboundPayloadError on bad input
+export function fromRawJson(payload: unknown, receivedAt?: Date): InboundEmail;   // generic JSON shape (see route)
 export function findInboundAlias(email: InboundEmail, inboundDomain: string): string | null;  // "r-xxxx"
-export function parseEmail(email: InboundEmail): ParsedEmail;        // pure; never throws
+/** Pure; never throws. Pass the account's time zone so "today"/"tomorrow" resolve at the delivery address. */
+export function parseEmail(email: InboundEmail, opts?: { timezone?: string }): ParsedEmail;
 export function htmlToText(html: string): string;
 ```
 
@@ -110,6 +115,7 @@ export function getStore(): Store;  // process-wide singleton (sqlite at DATABAS
 export function buildDashboard(input: {
   account: AccountView; shipments: StoredShipment[]; feeds: { source: SourceKind; lastSeenAt: string }[];
   verifications: ForwardingVerification[]; emailsReceived: number; lastEmailAt: string | null; now: Date;
+  demoMode: boolean;
 }): DashboardResponse;
 ```
 
@@ -120,7 +126,10 @@ export function parseLocation(input: string, countryHint?: string): ParsedLocati
 export function zipToState(zip5: string): string | null;
 export const PROGRAMS: Program[];
 export function getCoverage(country: string, region: string | null): Coverage;
-export function buildFilterInstructions(provider: EmailProvider, inboundAddress: string, programIds: ProgramId[]): FilterInstructions;
+export function buildFilterInstructions(
+  provider: EmailProvider, inboundAddress: string, programIds: ProgramId[],
+  options?: { country?: string; extraSenders?: string[] },
+): FilterInstructions;
 ```
 
 ## HTTP API
@@ -128,19 +137,22 @@ export function buildFilterInstructions(provider: EmailProvider, inboundAddress:
 | Method & path | Auth | Purpose |
 |---|---|---|
 | `POST /api/account` | none (rate-limited) | Create an account → sets session cookie, returns `{ account, accountKey }` (key shown once) |
-| `GET /api/account` | session | `AccountView` |
+| `GET /api/account` | session | `{ account: AccountView, demoMode }` (`AccountResponse`) |
 | `PATCH /api/account` | session | Update postal code / region / timezone / program checklist |
-| `DELETE /api/account` | session | Delete the account and all its data |
+| `DELETE /api/account` | session | Delete the account and all its data → `{ ok: true }` |
 | `POST /api/account/key` | session | Rotate the sign-in key (old key stops working) → `{ account, accountKey, demoMode }` |
 | `POST /api/session` | none (rate-limited) | Sign in with an account key → sets cookie |
-| `DELETE /api/session` | session | Sign out |
+| `DELETE /api/session` | none | Sign out on this device → `{ ok: true }` (works without a session) |
 | `GET /api/dashboard` | session | `DashboardResponse` |
-| `PATCH /api/shipments/[id]` | session | `{ hidden?, delivered? }` |
+| `PATCH /api/shipments/[id]` | session | `{ hidden?, delivered? }` → `{ shipment: StoredShipment }` |
 | `POST /api/inbound/postmark` | basic auth | Postmark inbound webhook |
 | `POST /api/inbound/raw` | bearer | Generic JSON inbound email |
-| `POST /api/demo/seed` | session, `DEMO_MODE=1` only | Inject sample carrier emails into the current account |
+| `POST /api/demo/seed` | session, `DEMO_MODE=1` only | Inject sample carrier emails into the current account → `{ added, updates }` |
 
-State-changing browser endpoints require a same-origin `Origin` header and a JSON body.
+State-changing browser endpoints require a same-origin `Origin` header; those that take input
+need a JSON body (`Content-Type: application/json`). Behind a reverse proxy set `TRUST_PROXY=1`, or
+rate limits are shared by all clients and the origin check may fail. Every env var is documented in
+`.env.example`.
 Inbound endpoints always answer 200 for well-formed-but-unroutable mail, so providers
 don't retry it forever.
 
