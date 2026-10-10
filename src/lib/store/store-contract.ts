@@ -147,6 +147,22 @@ export function describeStoreContract(name: string, create: () => Store): void {
         expect((await store.getAccountById("acc_1"))?.programs).toEqual(updated?.programs);
       });
 
+      it("keeps only well-formed program ids with a done/skipped state", async () => {
+        await store.createAccount(accountInput());
+        const programs = {
+          royal_mail_delivery_notifications: "done",
+          jp_post_e_tracking: "skipped",
+          "Bad-Key": "done",
+          x: "done",
+          ["a".repeat(65)]: "done",
+          __proto__: "done",
+          dhl_paket_app: "maybe",
+        } as unknown as Record<string, "done" | "skipped">;
+        const updated = await store.updateAccount("acc_1", { programs }, NOW);
+        expect(updated?.programs).toEqual({ royal_mail_delivery_notifications: "done", jp_post_e_tracking: "skipped" });
+        expect((await store.getAccountById("acc_1"))?.programs).toEqual(updated?.programs);
+      });
+
       it("rotates the key hash", async () => {
         await store.createAccount(accountInput());
         await store.updateAccount("acc_1", { keyHash: "hash-new" }, NOW);
@@ -435,6 +451,21 @@ export function describeStoreContract(name: string, create: () => Store): void {
           ["a_1", "TBA111", "in_transit"],
           ["c_1", "TBA222", "in_transit"],
           ["d_1", null, "delivered"],
+        ]);
+      });
+
+      it("stores worldwide carriers and carrier alerts as they are", async () => {
+        const updates = [
+          shipmentUpdate({ carrier: "royal_mail", trackingNumber: "AB123456785GB", source: "carrier_alert" }),
+          shipmentUpdate({ carrier: "intl_post", trackingNumber: "RR123456785CN", source: "carrier_alert" }),
+          shipmentUpdate({ carrier: "fourpx", trackingNumber: "4PX3001234567890CN", source: "generic" }),
+        ];
+        await store.applyUpdates("acc_1", updates, idSequence());
+        const rows = await store.listShipments("acc_1");
+        expect(rows.map((s) => [s.carrier, s.source]).sort()).toEqual([
+          ["fourpx", "generic"],
+          ["intl_post", "carrier_alert"],
+          ["royal_mail", "carrier_alert"],
         ]);
       });
 

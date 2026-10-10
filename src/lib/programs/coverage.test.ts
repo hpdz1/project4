@@ -186,6 +186,21 @@ describe("getCoverage: country details", () => {
     ]);
   });
 
+  it("covers Belgium with bpost and DPD's postcode-matched consignee profile", () => {
+    const coverage = getCoverage("BE", null);
+    expect(ids(coverage).account).toEqual(["bpost_app", "dpd_be", "amazon_orders"]);
+    expect(coverage.gaps[0]).toMatch(/plus your postcode/);
+  });
+
+  it("lists Aramex's per-shipment emails in the UAE and Saudi Arabia", () => {
+    for (const country of ["AE", "SA"]) {
+      const coverage = getCoverage(country, null);
+      expect(ids(coverage).perPackage, country).toContain("aramex_emails");
+      expect(coverage.basicParsing, country).toContain("Aramex");
+    }
+    expect(ids(getCoverage("AU", null)).perPackage).not.toContain("aramex_emails");
+  });
+
   it("uses each country's sign-up page and senders", () => {
     const dk = getCoverage("DK", null).accountPrograms.find((p) => p.id === "postnord_app");
     expect(dk?.signupUrl).toBe("https://www.postnord.dk/en/tools/app-postnord/");

@@ -16,7 +16,10 @@ export {
   buildFilterInstructions,
   collectSenders,
   guessEmailProvider,
+  isEmailProvider,
+  suggestedEmailProviders,
   type EmailProvider,
+  type EmailProviderInfo,
   type FilterInstructions,
   type FilterOptions,
 } from "./filters";

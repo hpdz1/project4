@@ -155,10 +155,14 @@ describe("PROGRAMS", () => {
     expect(PROGRAMS_BY_ID.sagawa_smart_club.emailAlerts.senders).toEqual(["info-nimotsu@sagawa-exp.co.jp"]);
     expect(PROGRAMS_BY_ID.la_poste_mes_suivis.emailAlerts.senders).toEqual(["noreply@notif-colissimo-laposte.info"]);
     expect(PROGRAMS_BY_ID.purolator_emails.emailAlerts.senders).toEqual(["notificationservice@purolator.com"]);
+    expect(PROGRAMS_BY_ID.dhl_paket_de.emailAlerts.senders).toEqual(
+      expect.arrayContaining(["noreply@dhl.de", "paketankuendigung@dhl.de", "zustellung@dhl.de", "sendungsupdate@dhl.de"]),
+    );
+    expect(PROGRAMS_BY_ID.aramex_emails.emailAlerts.senders).toEqual(["epod@aramex.com"]);
   });
 
   it("doesn't guess senders the research couldn't confirm", () => {
-    for (const id of ["correos_app", "seur_miseur", "poste_italiane_posteplus", "yamato_kuroneko_members", "nz_post_app"]) {
+    for (const id of ["correos_app", "seur_miseur", "poste_italiane_posteplus", "yamato_kuroneko_members", "nz_post_app", "dpd_be"]) {
       expect(PROGRAMS_BY_ID[id].emailAlerts.senders, id).toEqual([]);
     }
   });

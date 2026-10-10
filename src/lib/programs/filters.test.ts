@@ -1,10 +1,14 @@
 import { describe, expect, it } from "vitest";
+import { COUNTRIES } from "@/lib/location";
 import {
   EMAIL_PROVIDERS,
   PROGRAMS,
   buildFilterInstructions,
   collectSenders,
+  getCoverage,
   guessEmailProvider,
+  isEmailProvider,
+  suggestedEmailProviders,
   type EmailProvider,
 } from "@/lib/programs";
 import type { ProgramId } from "@/lib/types";
@@ -18,7 +22,8 @@ const US_PROGRAMS: ProgramId[] = [
   "dhl_on_demand",
   "ontrac_notifyme",
 ];
-const PROVIDERS: EmailProvider[] = ["gmail", "outlook", "yahoo", "icloud", "other"];
+const PROVIDERS: EmailProvider[] = EMAIL_PROVIDERS.map((p) => p.id);
+const REGIONAL: EmailProvider[] = ["gmx", "seznam", "mailru", "yandex", "qq", "netease", "naver", "daum"];
 
 describe("collectSenders", () => {
   it("dedupes and keeps program order", () => {
@@ -85,10 +90,20 @@ describe("buildFilterInstructions", () => {
     );
   });
 
-  it("keeps the Gmail query within Gmail's filter length even with every program", () => {
+  it("keeps the Gmail query within Gmail's filter length with every program offered in any one country", () => {
+    for (const { code } of COUNTRIES) {
+      const coverage = getCoverage(code, null);
+      const ids = [...coverage.addressPrograms, ...coverage.accountPrograms, ...coverage.perPackage].map((p) => p.id);
+      const result = buildFilterInstructions("gmail", INBOUND, ids, { country: code });
+      expect(result.filterQuery?.length ?? 0, code).toBeLessThan(1400);
+      expect(result.caveats.join(" "), code).not.toMatch(/split the senders/);
+    }
+  });
+
+  it("tells Gmail users to split an over-long filter", () => {
     const all = buildFilterInstructions("gmail", INBOUND, PROGRAMS.map((p) => p.id));
-    expect(all.filterQuery?.length).toBeLessThan(1400);
-    expect(all.caveats.join(" ")).not.toMatch(/split the senders/);
+    expect(all.filterQuery?.length).toBeGreaterThan(1400);
+    expect(all.caveats.join(" ")).toMatch(/split the senders across two filters/);
   });
 
   it("uses regional senders for the account's country", () => {
@@ -110,6 +125,7 @@ describe("buildFilterInstructions", () => {
     expect(result.needsForwardingVerification).toBe(true);
     expect(result.steps[0]).toMatch(/Yahoo Mail Plus/);
     expect(result.caveats.join(" ")).toMatch(/forwards everything/);
+    expect(result.caveats.join(" ")).toMatch(/Yahoo! JAPAN Mail .* is a separate service/);
   });
 
   it("tells iCloud users to make one rule per sender", () => {
@@ -118,10 +134,56 @@ describe("buildFilterInstructions", () => {
     expect(result.needsForwardingVerification).toBe(false);
   });
 
-  it("gives generic instructions for other providers", () => {
+  it("gives generic instructions for other providers, with honest fallbacks", () => {
     const result = buildFilterInstructions("other", INBOUND, ["fedex_delivery_manager"]);
     expect(result.steps.join(" ")).toContain("trackingupdates@fedex.com");
     expect(result.filterQuery).toBeNull();
+    const caveats = result.caveats.join(" ");
+    expect(caveats).toMatch(/can't automatically forward only some messages/);
+    expect(caveats).toMatch(/forward carrier emails by hand/);
+    expect(caveats).toMatch(/mail app such as Thunderbird/);
+    expect(caveats).toMatch(/separate free Gmail or Outlook\.com address/);
+  });
+
+  it.each(REGIONAL)("%s: a forwarding rule for the chosen senders, hedged because it's untested", (provider) => {
+    const result = buildFilterInstructions(provider, INBOUND, ["dhl_paket_de", "amazon_orders"], { country: "DE" });
+    expect(result.provider).toBe(provider);
+    expect(result.filterQuery).toBeNull();
+    const steps = result.steps.join(" ");
+    expect(steps).toContain(INBOUND);
+    expect(steps).toContain("paketankuendigung@dhl.de");
+    expect(steps).toContain("versandbestaetigung@amazon.de");
+    expect(result.verificationNote).toContain(INBOUND);
+    const caveats = result.caveats.join(" ");
+    expect(caveats).toMatch(/haven't been able to test these steps/);
+    expect(caveats).toMatch(/forward carrier emails by hand/);
+    expect(result.links.length).toBeGreaterThan(0);
+  });
+
+  it("expects a confirmation email only where the research says the provider sends one", () => {
+    const confirming = REGIONAL.filter((p) => buildFilterInstructions(p, INBOUND, ["dhl_paket_de"]).needsForwardingVerification);
+    expect(confirming).toEqual(["mailru", "yandex"]);
+    expect(buildFilterInstructions("mailru", INBOUND, ["dhl_paket_de"]).steps.join(" ")).toMatch(
+      /will probably email a confirmation link to r-k3j9x2m4q8w1@in\.example\.com/,
+    );
+    expect(buildFilterInstructions("seznam", INBOUND, ["dhl_paket_de"]).steps.join(" ")).toMatch(
+      /If Seznam emails a confirmation to/,
+    );
+  });
+
+  it("names the provider's own menu labels and regional caveats", () => {
+    expect(buildFilterInstructions("gmx", INBOUND, ["dhl_paket_de"]).steps.join(" ")).toContain("Filterregeln");
+    expect(buildFilterInstructions("gmx", INBOUND, ["dhl_paket_de"]).caveats.join(" ")).toMatch(/POP3\/IMAP/);
+    expect(buildFilterInstructions("qq", INBOUND, ["amazon_orders"]).caveats.join(" ")).toMatch(/WeChat/);
+    expect(buildFilterInstructions("naver", INBOUND, ["amazon_orders"]).caveats.join(" ")).toMatch(/KakaoTalk/);
+  });
+
+  it("says when there's nothing to forward, for regional providers too", () => {
+    for (const provider of REGIONAL) {
+      const result = buildFilterInstructions(provider, INBOUND, ["ontrac_notifyme"]);
+      expect(result.senders).toEqual([]);
+      expect(result.steps.join(" ")).toMatch(/nothing to forward/);
+    }
   });
 
   it("handles nothing to forward and bad input without throwing", () => {
@@ -146,9 +208,74 @@ describe("guessEmailProvider", () => {
     ["jane@yahoo.co.uk", "yahoo"],
     ["jane@icloud.com", "icloud"],
     ["jane@me.com", "icloud"],
+    ["jane@ymail.com", "yahoo"],
+    ["jane@yahoo.co.jp", "other"],
+    ["jane@gmx.de", "gmx"],
+    ["jane@web.de", "gmx"],
+    ["jane@gmx.com", "gmx"],
+    ["jane@seznam.cz", "seznam"],
+    ["jane@email.cz", "seznam"],
+    ["jane@mail.ru", "mailru"],
+    ["jane@bk.ru", "mailru"],
+    ["jane@yandex.ru", "yandex"],
+    ["jane@ya.ru", "yandex"],
+    ["jane@qq.com", "qq"],
+    ["jane@163.com", "netease"],
+    ["jane@126.com", "netease"],
+    ["jane@naver.com", "naver"],
+    ["jane@hanmail.net", "daum"],
+    ["jane@orange.fr", "other"],
+    ["jane@libero.it", "other"],
     ["jane@example.com", "other"],
     ["", "other"],
   ])("%s -> %s", (email, provider) => {
     expect(guessEmailProvider(email)).toBe(provider);
+  });
+});
+
+describe("EMAIL_PROVIDERS", () => {
+  it("has unique ids, labels for tabs and headings, and unique domains, with Other last", () => {
+    const ids = EMAIL_PROVIDERS.map((p) => p.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(ids.at(-1)).toBe("other");
+    expect(ids.slice(0, 4)).toEqual(["gmail", "outlook", "yahoo", "icloud"]);
+    for (const p of EMAIL_PROVIDERS) {
+      expect(p.label.trim().length).toBeGreaterThan(0);
+      expect(p.shortLabel.trim().length).toBeGreaterThan(0);
+      expect(p.shortLabel.length).toBeLessThanOrEqual(p.label.length);
+      for (const domain of p.domains) expect(guessEmailProvider(`someone@${domain}`), domain).toBe(p.id);
+    }
+    const domains = EMAIL_PROVIDERS.flatMap((p) => p.domains);
+    expect(new Set(domains).size).toBe(domains.length);
+  });
+
+  it("recognizes provider ids", () => {
+    expect(isEmailProvider("gmx")).toBe(true);
+    expect(isEmailProvider("other")).toBe(true);
+    expect(isEmailProvider("aol")).toBe(false);
+    expect(isEmailProvider(undefined)).toBe(false);
+  });
+});
+
+describe("suggestedEmailProviders", () => {
+  it.each([
+    ["DE", ["gmx", "gmail", "outlook", "yahoo", "icloud", "other"]],
+    ["at", ["gmx", "gmail", "outlook", "yahoo", "icloud", "other"]],
+    ["CZ", ["seznam", "gmail", "outlook", "yahoo", "icloud", "other"]],
+    ["RU", ["mailru", "yandex", "gmail", "outlook", "yahoo", "icloud", "other"]],
+    ["CN", ["qq", "netease", "gmail", "outlook", "yahoo", "icloud", "other"]],
+    ["KR", ["naver", "daum", "gmail", "outlook", "yahoo", "icloud", "other"]],
+    ["US", ["gmail", "outlook", "yahoo", "icloud", "other"]],
+    ["JP", ["gmail", "outlook", "yahoo", "icloud", "other"]],
+    ["ZZ", ["gmail", "outlook", "yahoo", "icloud", "other"]],
+    [null, ["gmail", "outlook", "yahoo", "icloud", "other"]],
+  ])("%s -> %j", (country, expected) => {
+    expect(suggestedEmailProviders(country)).toEqual(expected);
+  });
+
+  it("only suggests providers we have instructions for", () => {
+    for (const { code } of COUNTRIES) {
+      for (const provider of suggestedEmailProviders(code)) expect(isEmailProvider(provider)).toBe(true);
+    }
   });
 });
