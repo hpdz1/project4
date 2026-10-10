@@ -207,7 +207,8 @@ function jointAfter(text: string, tokens: Token[], i: number): Joint {
  * All-digit candidates printed like phone numbers: North American 3-3-4 /
  * 1-3-3-4; a "+", "(" or "(0)" in front; an international "00" prefix; a trunk "0"
  * plus area code followed by subscriber groups (030 12345678, 020 7946 0018,
- * 01 23 45 67 89, 03-1234-5678, 0412 345 678); Chinese mobiles 1xx xxxx xxxx.
+ * 01 23 45 67 89, 03-1234-5678, 0412 345 678); Chinese mobiles 1xx xxxx xxxx;
+ * Indian mobiles xxxxx xxxxx.
  */
 function looksLikePhone(text: string, raw: string, start: number): boolean {
   if (/[A-Za-z]/.test(raw)) return false;
@@ -217,11 +218,14 @@ function looksLikePhone(text: string, raw: string, start: number): boolean {
   if (groups.length >= 2) {
     const digits = groups.join("").length;
     const first = groups[0];
-    if (digits >= 9 && digits <= 13 && groups[groups.length - 1].length >= 2) {
-      if (/^00[1-9]/.test(first)) return true;
-      if (/^0[1-9]/.test(first) && first.length <= 5 && !groups.every((g) => g.length === 4)) return true;
+    const lastGroupOk = groups[groups.length - 1].length >= 2;
+    // "00" + country code + up to 15 digits (E.164).
+    if (/^00[1-9]/.test(first) && digits >= 9 && digits <= 17 && lastGroupOk) return true;
+    if (/^0[1-9]/.test(first) && first.length <= 5 && digits >= 9 && digits <= 13 && lastGroupOk) {
+      if (!groups.every((g) => g.length === 4)) return true;
     }
-    if (shape === "3,4,4" && first.startsWith("1")) return true;
+    if (shape === "3,4,4" && first.startsWith("1")) return true; // Chinese mobile 1xx xxxx xxxx
+    if (shape === "5,5" && /^[6-9]/.test(first)) return true; // Indian mobile 98xxx xxxxx
   }
   const before = text.slice(Math.max(0, start - 6), start);
   // "+1 312...", "(312) ...", and the "(0)" of "+44 (0)20 7946 0018" / "+49 (0)30 12345678".
@@ -277,6 +281,22 @@ function acceptFromText(
   return null;
 }
 
+/**
+ * True when token `first` continues a printed group run: the token before it
+ * is joined to it and has a digit, or it follows an IBAN's country, check
+ * digits and bank code ("GB29 NWBK 6016 1331 9268 19").
+ */
+function gluedToPrevious(tokens: Token[], joints: Joint[], first: number): boolean {
+  if (first === 0 || joints[first - 1] === null) return false;
+  if (tokens[first - 1].hasDigit) return true;
+  return (
+    first >= 2 &&
+    joints[first - 2] === "space" &&
+    /^[A-Z]{4}$/.test(tokens[first - 1].text) &&
+    /^[A-Z]{2}[0-9]{2}$/.test(tokens[first - 2].text)
+  );
+}
+
 function findInText(text: string, hint: CarrierId | null): { pos: number; result: DetectedTrackingNumber }[] {
   const tokens = tokenize(text);
   const joints = tokens.map((_, i) => jointAfter(text, tokens, i));
@@ -287,7 +307,7 @@ function findInText(text: string, hint: CarrierId | null): { pos: number; result
     // Never start inside a dash-joined compound (e.g. order 113-1234567-1234567).
     if (first > 0 && joints[first - 1] === "dash") continue;
     const start = tokens[first].start;
-    const joinedBefore = first > 0 && joints[first - 1] !== null && tokens[first - 1].hasDigit;
+    const joinedBefore = gluedToPrevious(tokens, joints, first);
     let context: Context | null = null;
     const readOnce = () => (context ??= readContext(text.slice(Math.max(0, start - CONTEXT_CHARS), start)));
     let s = "";

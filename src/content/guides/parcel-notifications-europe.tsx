@@ -33,18 +33,19 @@ export default function Content() {
       </p>
       <ul>
         <li>
-          <strong>Matched to your verified address.</strong> A few services,
-          such as Swiss Post, Austrian Post, DHL in Germany and PostNL, check
-          that you really live at your address, often with a code posted to
-          you, and then list parcels addressed to you there. This is the
-          closest Europe gets to USPS Informed Delivery in the US.
+          <strong>Matched to your address.</strong> A few services, such as
+          Swiss Post, DHL in Germany and PostNL, check that you really live at
+          your address, often with a code posted to you, and then list parcels
+          addressed to you there. Austrian Post similarly matches the name and
+          address on a parcel to your account. This is the closest Europe gets
+          to USPS Informed Delivery in the US.
         </li>
         <li>
           <strong>Matched to your email or phone number.</strong> Most
-          others, including An Post, InPost, PostNord, Correos, DPD and GLS,
-          link a parcel to you when the email address or mobile number the
-          shop passed to the carrier matches the one in your account. Your
-          address isn’t checked at all.
+          others, including An Post, InPost, PostNord, Correos and GLS, link
+          a parcel to you when the email address or mobile number the shop
+          passed to the carrier matches the one in your account. Your address
+          usually plays no part.
         </li>
       </ul>
       <p>
@@ -56,10 +57,8 @@ export default function Content() {
         senders often don’t.
       </p>
       <p>
-        Many European carriers also prefer app notifications to email. In
-        each app, open the notification settings and switch email on where
-        it’s offered. You’ll need email alerts if you want to collect them all
-        in one place later.
+        Many carriers also prefer app notifications to email, so switch
+        email on in each app’s settings where it’s offered.
       </p>
 
       <h2>Quick reference by country</h2>
@@ -340,7 +339,7 @@ export default function Content() {
         </li>
       </ul>
 
-      <h2>Poland, Czechia and the rest of Central Europe</h2>
+      <h2>Poland, Czechia, the Baltics and Romania</h2>
       <p>
         Poland runs on phone numbers. <strong>InPost Mobile</strong> shows the
         parcels tied to your phone number, with the pickup code or QR code
@@ -419,14 +418,15 @@ export default function Content() {
         proof on its own. If a message asks for a small payment, a customs
         fee or card details to release a parcel, don’t use its link: open the
         carrier’s app yourself and look the parcel up there. Once you’ve
-        signed up as described above, a genuine parcel will be listed. Our{" "}
+        signed up as described above, a genuine parcel will often be listed
+        there too. Our{" "}
         <Link href="/guides/fake-delivery-text-scams">guide to fake delivery texts</Link>{" "}
         walks through the warning signs.
       </p>
 
       <h2>Putting it all in one place</h2>
       <p>
-        With several apps switched on, the answer to “is anything coming?”
+        With a few apps switched on, the answer to “is anything coming?”
         is spread across several places. <span translate="no">Package Radar</span>{" "}
         collects the emails your carriers and shops send you: one email
         filter forwards them to your personal{" "}
@@ -448,8 +448,8 @@ export default function Content() {
         </li>
         <li>
           Emails in German, French, Polish or any other language are fine to
-          forward. For some carriers we can only pick out the tracking number
-          and a basic status, and we’re adding more over time.
+          forward, although for some carriers we can only pick out the
+          tracking number and a basic status.
         </li>
       </ul>
       <p>

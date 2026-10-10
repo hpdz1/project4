@@ -17,9 +17,10 @@ export default function Content() {
     <>
       <p>
         Across Asia and the Pacific, how you hear about an incoming parcel
-        depends heavily on where you live. Japan, Australia and New Zealand
-        have carrier programs that email you about parcels on their way. In
-        much of the rest of the region, carriers match parcels to your mobile
+        depends heavily on where you live. In Japan and Australia, carriers
+        will email you about parcels on their way once you sign up, and New
+        Zealand Post links parcels to your account in its app. In much of
+        the rest of the region, carriers match parcels to your mobile
         number and tell you through an app, a text message or a messaging
         service such as LINE, KakaoTalk, WeChat, WhatsApp or Zalo. And
         nowhere will a carrier show you every parcel heading to an address
@@ -104,7 +105,7 @@ export default function Content() {
 
       <h2>Japan</h2>
       <p>
-        Japan is the one country in Asia where all the big carriers run free,
+        Japan is the one country in Asia where all three big carriers run
         account-based email programs much like the US ones.
       </p>
       <ul>
@@ -165,7 +166,7 @@ export default function Content() {
           needed. A parcel won’t appear if the sender typed a different
           number, and new ones can take a few hours to show up. Korea Post
           lets members look up parcels by phone number after an identity
-          check, but you have to ask each time. Most shops and carriers send
+          check, but you have to ask each time. Many shops and carriers send
           updates as KakaoTalk business messages (
           <span lang="ko">알림톡</span>).
         </li>
@@ -272,13 +273,13 @@ export default function Content() {
           app tracks by article number only.
         </li>
         <li>
-          <strong>Delhivery</strong> also lets you look up shipments by
-          mobile number, confirmed with a one-time code, instead of a waybill.
+          <strong>Delhivery</strong> lets you look up shipments by mobile
+          number, confirmed with a one-time code, instead of a waybill.
           Blue Dart says it never asks for a PIN or one-time code for payment,
           which helps you spot fake “pay to release your parcel” messages.
         </li>
         <li>
-          <strong>Flipkart</strong> orders, mostly delivered by Ekart, are
+          <strong>Flipkart</strong> orders, often delivered by Ekart, are
           tracked under My Orders, and Flipkart emails and texts you when the
           seller ships. Amazon.in emails cover your own orders.
         </li>
@@ -350,10 +351,11 @@ export default function Content() {
       </p>
       <ul>
         <li>
-          <strong>Japan, Australia and New Zealand:</strong> turn on email
-          notices with each carrier above and forward them. Our support for
+          <strong>Japan and Australia:</strong> turn on email notices with
+          each carrier above and forward them. Our support for
           Japanese-language carrier emails is basic for now, so expect
-          tracking numbers and simple statuses rather than full detail.
+          tracking numbers and simple statuses rather than full detail. In
+          New Zealand, forward the NZ Post and Aramex emails you do receive.
         </li>
         <li>
           <strong>Everywhere else:</strong> forward the shipping emails from

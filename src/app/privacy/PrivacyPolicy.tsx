@@ -378,8 +378,8 @@ export function PrivacyPolicy({ operator, showPlaceholders }: PrivacyPolicyProps
             attachments or images.
           </li>
           <li>
-            <strong>Everything else in the email,</strong> including its full
-            text, links and any order details.
+            <strong>Everything else in the email,</strong> such as its full
+            text and any other details it contains.
           </li>
         </ul>
         <p>
@@ -749,8 +749,8 @@ export function PrivacyPolicy({ operator, showPlaceholders }: PrivacyPolicyProps
         <p>Wherever you live, you can do this yourself at any time:</p>
         <ul>
           <li>
-            <strong>See</strong> everything we hold about your shipments on
-            your dashboard.
+            <strong>See</strong> your shipments and settings on your
+            dashboard.
           </li>
           <li>
             <strong>Get a copy</strong> of all your data in a machine-readable
@@ -877,8 +877,8 @@ export function PrivacyPolicy({ operator, showPlaceholders }: PrivacyPolicyProps
           secret that we store only in hashed form. Your forwarding address is
           random, so it can&apos;t be guessed, and it only lets someone send
           email to your radar, never read it. We never store email bodies, and
-          we delete old data on the schedule above, so there is little to
-          lose. No system is perfectly secure, so treat your sign-in key like a
+          we delete old data on the schedule above, so there is less to
+          expose. No system is perfectly secure, so treat your sign-in key like a
           password and don&apos;t share it.
         </p>
         <p>
@@ -905,8 +905,8 @@ export function PrivacyPolicy({ operator, showPlaceholders }: PrivacyPolicyProps
             <time dateTime="2026-10-10">{formatIsoDate("2026-10-10")}</time>:
             rewritten for visitors worldwide. Added the retention schedule,
             legal bases, rights by region, data download and international
-            transfers. Item descriptions are no longer stored, and the ones we
-            had were deleted.
+            transfers. Item descriptions are no longer stored, and existing
+            ones are deleted.
           </li>
           <li>
             <time dateTime="2026-10-08">{formatIsoDate("2026-10-08")}</time>:

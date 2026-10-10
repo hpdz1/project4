@@ -282,7 +282,7 @@ describe.each(rendered.filter((g) => REGIONAL_SLUGS.includes(g.meta.slug)))(
       for (const href of external) expect(href).toMatch(/^https:\/\//);
     });
 
-    it("links to setup and the other regional guides", () => {
+    it("links to setup and the main getting-started guide", () => {
       const hrefs = anchorTags(html).map((tag) => attr(tag, "href"));
       expect(hrefs).toContain("/setup");
       expect(hrefs).toContain("/guides/how-to-see-every-package-coming-to-your-address");

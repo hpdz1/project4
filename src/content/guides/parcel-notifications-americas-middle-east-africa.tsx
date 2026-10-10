@@ -276,8 +276,8 @@ export default function Content() {
         <li>
           <strong>South Africa:</strong> we found no recipient program. The
           South African Post Office has spent years in business rescue and
-          closed many branches, so many shops ship with private couriers such
-          as The Courier Guy, and pickup networks such as Pargo text you when
+          closed many branches, and many shops ship with private couriers
+          such as The Courier Guy instead, and pickup networks such as Pargo text you when
           a parcel is ready. Takealot keeps you updated about your own orders
           by email, text and app.
         </li>
@@ -302,11 +302,11 @@ export default function Content() {
 
       <h2>Keep your ID numbers to yourself</h2>
       <p>
-        Several countries in this guide use national identifiers to match
-        parcels: the CPF in Brazil, the Emirates ID in the UAE, the national
-        ID number in Turkey and Israel, and the National Address in Saudi
-        Arabia. Enter them only in the carrier’s or government’s own app or
-        website. A third-party site that offers to find your parcels if you
+        Several services in this guide use a national ID number to match
+        parcels or to log you in: the CPF in Brazil, the Emirates ID in the
+        UAE and the national ID number in Turkey and Israel. Give it only to
+        the carrier’s or government’s own app or website, or to a shop you
+        trust that needs it for customs or an invoice. A third-party site that offers to find your parcels if you
         type in your ID number is, at best, collecting data it doesn’t need,
         and a text that asks for it to “release” a parcel is a scam. Our{" "}
         <Link href="/guides/fake-delivery-text-scams">guide to fake delivery texts</Link>{" "}
@@ -325,7 +325,7 @@ export default function Content() {
         <li>
           <strong>In Canada,</strong> switch on the three programs above with
           email alerts and forward them, along with Purolator and Intelcom
-          emails. English and French messages both work.
+          emails. Bilingual English and French emails are fine to forward.
         </li>
         <li>
           <strong>Elsewhere,</strong> forward shop shipping emails (Amazon,
