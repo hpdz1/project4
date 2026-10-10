@@ -17,15 +17,29 @@ const EXPECTED: ReadonlyArray<Pick<GuideMeta, "slug" | "category">> = [
   { slug: "fake-delivery-text-scams", category: "Safety" },
   { slug: "package-you-didnt-order", category: "Safety" },
   { slug: "package-says-delivered-but-not-here", category: "Troubleshooting" },
+  { slug: "parcel-notifications-europe", category: "Around the world" },
+  { slug: "parcel-notifications-asia-pacific", category: "Around the world" },
+  { slug: "parcel-notifications-americas-middle-east-africa", category: "Around the world" },
+];
+
+/** Long, country-by-country guides for readers outside the US. */
+const REGIONAL_SLUGS = EXPECTED.filter((g) => g.category === "Around the world").map((g) => g.slug);
+
+/** Guides that point non-US readers to every regional guide. */
+const LINKS_TO_REGIONAL = [
+  "how-to-see-every-package-coming-to-your-address",
+  "track-a-package-without-a-tracking-number",
 ];
 
 /** Claims we must never make (no one can look up packages for an arbitrary address). */
 const BANNED_PHRASES: readonly RegExp[] = [
-  /track any package/i,
-  /any package by address/i,
-  /packages? (?:for|to) any address/i,
+  /track any (?:package|parcel)/i,
+  /any (?:package|parcel) by address/i,
+  /(?:package|parcel)s? (?:for|to) any address/i,
   /look up any address/i,
   /enter any address/i,
+  // We never store item descriptions (they can reveal sensitive purchases).
+  /\b(?:stores?|keeps?|saves?) (?:the |your )?(?:item|product) (?:names?|descriptions?)\b/i,
 ];
 
 /** External links may only point at official carrier, retailer or government sites. */
@@ -42,6 +56,35 @@ const OFFICIAL_DOMAINS = [
   "walmart.com",
   "target.com",
   "canadapost-postescanada.ca",
+  // Europe
+  "anpost.com",
+  "bpost.be",
+  "ceskaposta.cz",
+  "correos.es",
+  "dhlparcel.nl",
+  "dpd.co.uk",
+  "dpd.com",
+  "evri.com",
+  "laposte.fr",
+  "post.at",
+  "post.ch",
+  "poste.it",
+  "posten.no",
+  "posti.fi",
+  "postnl.nl",
+  "postnord.se",
+  // Asia-Pacific
+  "aramex.com.au",
+  "auspost.com.au",
+  "japanpost.jp",
+  "nzpost.co.nz",
+  "sendle.com",
+  "singpost.com",
+  // Americas, Middle East and Africa
+  "correios.com.br",
+  "emiratespost.ae",
+  "israelpost.co.il",
+  "splonline.com.sa",
 ];
 
 const STATIC_ROUTES = new Set(["/", "/setup", "/dashboard", "/guides", "/about", "/privacy", "/terms", "/contact"]);
@@ -96,7 +139,7 @@ const rendered: RenderedGuide[] = GUIDES.map(({ meta, Content }) => {
 });
 
 describe("guide registry", () => {
-  it("lists the eight guides in index order with their categories", () => {
+  it("lists the eleven guides in index order with their categories", () => {
     expect(GUIDES.map((g) => ({ slug: g.meta.slug, category: g.meta.category }))).toEqual(EXPECTED);
   });
 
@@ -144,9 +187,11 @@ describe.each(rendered)("$meta.slug", ({ meta, html, text, words }) => {
     expect(Number.isInteger(meta.readingMinutes)).toBe(true);
   });
 
-  it("is a substantial article (900–1,600 words) with an honest reading time", () => {
-    expect(words).toBeGreaterThanOrEqual(900);
-    expect(words).toBeLessThanOrEqual(1600);
+  it("is a substantial article with an honest reading time", () => {
+    // Regional guides cover many countries, so they run longer.
+    const [min, max] = REGIONAL_SLUGS.includes(meta.slug) ? [1500, 2500] : [900, 1600];
+    expect(words).toBeGreaterThanOrEqual(min);
+    expect(words).toBeLessThanOrEqual(max);
     expect(Math.abs(meta.readingMinutes - words / WORDS_PER_MINUTE)).toBeLessThanOrEqual(1.5);
   });
 
@@ -197,6 +242,12 @@ describe.each(rendered)("$meta.slug", ({ meta, html, text, words }) => {
     }
   });
 
+  it("keeps codes, addresses and tracking-number prefixes out of browser translation", () => {
+    for (const tag of html.match(/<code(?:\s[^>]*)?>/g) ?? []) {
+      expect(tag, "code element without translate=no").toMatch(/translate="no"/);
+    }
+  });
+
   it("has no rendering slips", () => {
     expect(text).not.toMatch(/\bundefined\b|\[object Object\]|\bNaN\b/);
     // A missing {" "} in JSX glues a word onto a link or emphasis.
@@ -204,5 +255,59 @@ describe.each(rendered)("$meta.slug", ({ meta, html, text, words }) => {
     expect(html).not.toMatch(/<\/(?:a|strong|em|code)>[A-Za-z0-9]/);
     // Straight quotes in prose usually mean a missed curly quote or entity.
     expect(text).not.toMatch(/'/);
+  });
+});
+
+describe.each(rendered.filter((g) => REGIONAL_SLUGS.includes(g.meta.slug)))(
+  "regional guide $meta.slug",
+  ({ meta, html, text }) => {
+    it("is listed under Around the world", () => {
+      expect(meta.category).toBe("Around the world");
+    });
+
+    it("is organised into enough sections to scan by country", () => {
+      expect((html.match(/<h2[\s>]/g) ?? []).length).toBeGreaterThanOrEqual(7);
+    });
+
+    it("has a comparison table with column headers", () => {
+      expect(html).toMatch(/<table>/);
+      expect((html.match(/<th scope="col">/g) ?? []).length).toBeGreaterThanOrEqual(3);
+    });
+
+    it("cites several official pages over https", () => {
+      const external = anchorTags(html)
+        .map((tag) => attr(tag, "href") ?? "")
+        .filter((href) => /^[a-z]+:/i.test(href));
+      expect(external.length).toBeGreaterThanOrEqual(5);
+      for (const href of external) expect(href).toMatch(/^https:\/\//);
+    });
+
+    it("links to setup and the other regional guides", () => {
+      const hrefs = anchorTags(html).map((tag) => attr(tag, "href"));
+      expect(hrefs).toContain("/setup");
+      expect(hrefs).toContain("/guides/how-to-see-every-package-coming-to-your-address");
+    });
+
+    it("is honest about what email forwarding can and can’t see", () => {
+      expect(text).toMatch(/can’t be forwarded|Not reachable/);
+      expect(text).toMatch(/We don’t store what you ordered/);
+    });
+
+    it("marks the brand name as not to be translated", () => {
+      expect(html).toMatch(/<span translate="no">Package Radar<\/span>/);
+      expect(text).not.toMatch(/track (?:any|every) (?:package|parcel) by address/i);
+    });
+  },
+);
+
+describe.each(LINKS_TO_REGIONAL)("%s", (slug) => {
+  it("points readers outside the US to every regional guide", () => {
+    const guide = rendered.find((g) => g.meta.slug === slug);
+    expect(guide).toBeDefined();
+    const hrefs = anchorTags(guide?.html ?? "").map((tag) => attr(tag, "href"));
+    for (const regional of REGIONAL_SLUGS) {
+      expect(hrefs).toContain(`/guides/${regional}`);
+    }
+    expect(guide?.html).toMatch(/<h2>Outside the US\?<\/h2>/);
   });
 });

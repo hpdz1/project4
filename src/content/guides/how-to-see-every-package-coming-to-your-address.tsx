@@ -7,7 +7,7 @@ export const meta: GuideMeta = {
   description:
     "USPS, UPS and FedEx will show you the packages headed to your home for free once you verify your address. What each shows, the gaps, and a 15-minute plan.",
   published: "2026-10-08",
-  updated: "2026-10-08",
+  updated: "2026-10-10",
   readingMinutes: 6,
   category: "Getting started",
 };
@@ -257,22 +257,48 @@ export default function Content() {
       <p>
         We can only show what your carriers email you about. We never ask for
         carrier passwords or tracking numbers, and if you skip a program its
-        packages won’t appear. When you’re ready, Package Radar’s{" "}
+        packages won’t appear. From each email we keep only the carrier,
+        tracking number, shipper, status and dates, never a description of
+        what’s inside. When you’re ready, Package Radar’s{" "}
         <Link href="/setup">setup</Link> walks you through it step by step.
       </p>
 
-      <h2>Outside the US</h2>
+      <h2>Outside the US?</h2>
       <p>
-        UPS My Choice is offered in many countries, though UPS says
-        availability varies by location, and FedEx Delivery Manager has a
-        residential version in Canada. Several national postal services run
-        their own address-matched programs, such as Canada Post’s{" "}
-        <a href="https://www.canadapost-postescanada.ca/cpc/en/personal/manage-mail/automatic-tracking.page" rel="noopener noreferrer" target="_blank">automatic tracking</a>{" "}
-        and DHL’s{" "}
-        <a href="https://www.dhl.de/en/privatkunden/pakete-empfangen/sendungen-verfolgen/paketankuendigung.html" rel="noopener noreferrer" target="_blank">parcel announcement</a>{" "}
-        in Germany. Others match parcels to the email or phone number you
-        give the shop rather than your address. Check your national carrier’s
-        website for what it offers.
+        The same rule holds everywhere: no carrier will show you the parcels
+        for an address just because you typed it in, but many will tell a
+        verified resident or account holder about parcels coming to them.
+        What changes from country to country is how they recognise you.
+      </p>
+      <ul>
+        <li>
+          <strong>By verified address,</strong> like the US programs above:
+          Canada Post’s{" "}
+          <a href="https://www.canadapost-postescanada.ca/cpc/en/personal/manage-mail/automatic-tracking.page" rel="noopener noreferrer" target="_blank">automatic tracking</a>
+          , DHL’s{" "}
+          <a href="https://www.dhl.de/en/privatkunden/pakete-empfangen/sendungen-verfolgen/paketankuendigung.html" rel="noopener noreferrer" target="_blank">parcel announcement</a>{" "}
+          in Germany, PostNL, Swiss Post and Japan Post. UPS My Choice is
+          offered in many countries too, though UPS says availability varies
+          by location.
+        </li>
+        <li>
+          <strong>By the email or phone number you give the shop,</strong>{" "}
+          which is how most carriers in Europe, Australia and New Zealand
+          work. Use the same details at checkout as in your carrier accounts.
+        </li>
+        <li>
+          <strong>Only in an app or by text message,</strong> which is common
+          in Asia, Latin America, the Middle East and Africa.
+        </li>
+      </ul>
+      <p>
+        Our regional guides go country by country:{" "}
+        <Link href="/guides/parcel-notifications-europe">Europe, including the UK and Ireland</Link>
+        ,{" "}
+        <Link href="/guides/parcel-notifications-asia-pacific">Asia-Pacific</Link>{" "}
+        and{" "}
+        <Link href="/guides/parcel-notifications-americas-middle-east-africa">Canada, Latin America, the Middle East and Africa</Link>
+        .
       </p>
     </>
   );

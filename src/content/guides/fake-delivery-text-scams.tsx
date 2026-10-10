@@ -130,23 +130,23 @@ export default function Content() {
               <td>
                 Texts only if you asked for updates with a tracking number,
                 and no links in them. Tracking emails come from{" "}
-                <code>auto-reply@usps.com</code>; Informed Delivery digests
+                <code translate="no">auto-reply@usps.com</code>; Informed Delivery digests
                 currently come from an address ending in{" "}
-                <code>informeddelivery.usps.com</code>.
+                <code translate="no">informeddelivery.usps.com</code>.
               </td>
             </tr>
             <tr>
               <td>UPS</td>
               <td>
                 Links start with www.ups.com or billing.ups.com. UPS My
-                Choice alerts come from <code>mcinfo@ups.com</code>.
+                Choice alerts come from <code translate="no">mcinfo@ups.com</code>.
               </td>
             </tr>
             <tr>
               <td>FedEx</td>
               <td>
                 Delivery Manager alerts come from{" "}
-                <code>TrackingUpdates@fedex.com</code> and name a specific
+                <code translate="no">TrackingUpdates@fedex.com</code> and name a specific
                 tracking number and shipper.
               </td>
             </tr>
@@ -175,7 +175,7 @@ export default function Content() {
         <li>
           <strong>For messages pretending to be USPS</strong>, the Postal
           Inspection Service also accepts reports by email at{" "}
-          <code>spam@uspis.gov</code>.
+          <code translate="no">spam@uspis.gov</code>.
         </li>
         <li>
           <strong>Report it to the FTC</strong> at{" "}

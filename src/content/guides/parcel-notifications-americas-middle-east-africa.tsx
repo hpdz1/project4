@@ -8,7 +8,7 @@ export const meta: GuideMeta = {
     "Canada works much like the US; elsewhere, alerts come mostly by app or text. What to switch on in each country, and which emails are worth forwarding.",
   published: "2026-10-10",
   updated: "2026-10-10",
-  readingMinutes: 9,
+  readingMinutes: 8,
   category: "Around the world",
 };
 

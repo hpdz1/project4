@@ -205,7 +205,7 @@ function jointAfter(text: string, tokens: Token[], i: number): Joint {
 
 /**
  * All-digit candidates printed like phone numbers: North American 3-3-4 /
- * 1-3-3-4; a "+" or "(" in front; an international "00" prefix; a trunk "0"
+ * 1-3-3-4; a "+", "(" or "(0)" in front; an international "00" prefix; a trunk "0"
  * plus area code followed by subscriber groups (030 12345678, 020 7946 0018,
  * 01 23 45 67 89, 03-1234-5678, 0412 345 678); Chinese mobiles 1xx xxxx xxxx.
  */
@@ -223,8 +223,9 @@ function looksLikePhone(text: string, raw: string, start: number): boolean {
     }
     if (shape === "3,4,4" && first.startsWith("1")) return true;
   }
-  const prefix = text.slice(Math.max(0, start - 3), start).trimEnd();
-  return /[+(]$/.test(prefix);
+  const before = text.slice(Math.max(0, start - 6), start);
+  // "+1 312...", "(312) ...", and the "(0)" of "+44 (0)20 7946 0018" / "+49 (0)30 12345678".
+  return /[+(]\s{0,2}$/.test(before) || /\(0\)\s{0,2}$/.test(before);
 }
 
 /** Lengths phone numbers have once their punctuation is gone (national and international forms). */

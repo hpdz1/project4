@@ -58,19 +58,22 @@ export const NEGATIVE_RE = labelRegex([
   "ref", "reference", "case", "ticket", "claim", "rma", "booking", "reservation",
   "phone", "call", "tel", "telephone", "fax", "mobile", "hotline", "whatsapp",
   "sku", "item", "model", "serial", "isbn", "upc", "ean", "gtin", "qty", "quantity",
-  "price", "total", "subtotal", "amount", "card", "gift", "promo", "coupon", "voucher", "pin", "routing",
+  // Not "PIN": Purolator calls its tracking number a PIN.
+  "price", "total", "subtotal", "amount", "card", "gift", "promo", "coupon", "voucher", "routing",
   "zip", "zipcode", "postcode", "postal code", "vat", "tax id", "iban", "bic", "swift", "sort code",
+  "cell", "sms", "company (?:no|number|reg\\p{L}*)", "reg\\.? no", "abn", "acn", "gst", "gstin", "rfc", "uid",
   // de
   "bestell\\p{L}*", "auftrag\\p{L}*", "rechnung\\p{L}*", "kunden\\p{L}*", "telefon\\p{L}*", "handy", "artikel\\p{L}*",
   "referenz\\p{L}*", "konto\\p{L}*", "plz", "postleitzahl", "ust-?id\\p{L}*", "ust", "mwst", "steuer\\p{L}*", "betrag",
-  "preis", "summe", "gutschein\\p{L}*",
+  "preis", "summe", "gutschein\\p{L}*", "mobil\\p{L}*", "handelsregister", "hrb",
   // fr
   "commande", "facture", "client", "t[ée]l[ée]phone", "t[ée]l", "r[ée]f[ée]rence", "tva", "siret", "siren",
-  "code postal", "montant", "prix",
+  "code postal", "montant", "prix", "portable",
   // es / pt / it / nl
   "pedido", "factura", "fatura", "fattura", "cliente", "tel[ée]fono", "telefone", "telefono", "referencia",
   "riferimento", "iva", "nif", "cif", "cnpj", "cpf", "c[óo]digo postal", "importe", "precio", "pre[çc]o", "prezzo",
   "ordine", "bestelling", "ordernummer", "factuur", "klant\\p{L}*", "telefoon", "btw", "postcode", "bedrag", "prijs",
+  "m[óo]vil", "celular", "cellulare", "codice fiscale", "mobiel", "kvk", "ondernemingsnummer",
   // pl / cs / sv / no / da / fi / tr
   "zam[óo]wieni\\p{L}*", "faktur\\p{L}*", "klient\\p{L}*", "nip", "objedn[áa]vk\\p{L}*",
   "kund\\p{L}*", "moms", "postnummer", "tilaus\\p{L}*", "lasku\\p{L}*", "puhelin\\p{L}*", "alv", "sipari[şs]\\p{L}*",
@@ -82,7 +85,8 @@ export const NEGATIVE_RE = labelRegex([
 /** Words that mean a nearby phone-length number is a phone number. */
 export const PHONE_WORD_RE = labelRegex([
   "call", "phone", "tel", "telephone", "fax", "mobile", "cell", "sms", "dial", "hotline", "toll[\\s-]?free", "whatsapp",
-  "telefon\\p{L}*", "handy", "t[ée]l[ée]phone", "t[ée]l", "tel[ée]fono", "telefone", "telefono", "telefoon", "puhelin\\p{L}*",
+  "telefon\\p{L}*", "handy", "mobil\\p{L}*", "t[ée]l[ée]phone", "t[ée]l", "portable", "tel[ée]fono", "telefone", "telefono",
+  "m[óo]vil", "celular", "cellulare", "telefoon", "mobiel", "gsm", "puhelin\\p{L}*",
   "電話", "电话", "전화", "هاتف",
 ]);
 

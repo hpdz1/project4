@@ -100,99 +100,118 @@ export function sameFamily(a: CarrierId, b: CarrierId): boolean {
 // Tracking pages
 // ---------------------------------------------------------------------------
 
+/** What a deep link may use besides the number. */
+interface LinkContext {
+  /** ISO 3166-1 alpha-2 delivery country, uppercase; null when unknown. */
+  country: string | null;
+  /** Delivery postcode, trimmed; null when unknown. */
+  postcode: string | null;
+}
+
 interface PageDef {
-  /** Deep link; `{n}` is the URI-encoded number, `{cc}` the destination country (template used only when known). */
-  template?: string;
-  /** The template is only right for parcels delivered in these countries. */
-  templateCountries?: readonly string[];
-  /** The carrier's tracking page without the number, for when no deep link is safe. */
+  /** Deep link for a number (already URI-encoded), or null when it needs facts we don't have. */
+  link?: (n: string, ctx: LinkContext) => string | null;
+  /** The carrier's tracking page without the number, for when there is no safe deep link. */
   landing?: string;
 }
 
+/** A deep link that only needs the number (`{n}`). */
+function template(t: string): (n: string) => string {
+  return (n) => t.replace("{n}", n);
+}
+
 /**
- * Where to send a user to track a number. Sources: research/programs.md Part B
- * and research/worldwide/tracking-formats-intl.md §4/§7.
+ * PostNL's documented direct link (research/programs.md Part B, PostNL's
+ * step-by-step card): B = barcode and D = destination country are required,
+ * P = postcode is required for parcels to NL, BE, DE, GB and US.
+ */
+const POSTNL_POSTCODE_COUNTRIES: ReadonlySet<string> = new Set(["NL", "BE", "DE", "GB", "US"]);
+
+function postnlLink(n: string, { country, postcode }: LinkContext): string | null {
+  if (!country) return null;
+  const p = postcode ? postcode.replace(/\s+/g, "").toUpperCase() : null;
+  if (!p && POSTNL_POSTCODE_COUNTRIES.has(country)) return null;
+  const pc = p ? `&P=${encodeURIComponent(p)}` : "";
+  return `https://postnl.nl/tracktrace/?B=${n}${pc}&D=${country}&T=C&L=EN`;
+}
+
+/**
+ * Where to send a user to track a number.
  *
- * Deep links are used when the template is documented by the carrier or
- * search-indexed (USPS, UPS, Royal Mail's linking page, PostNL's step card,
- * DPD UK), or when the number only goes into the query string or #fragment of
- * a tracking page that the research sources agree on (a page that ignores the
- * parameter still opens on the carrier's tracker). Where an unverified
- * template would put the number in the URL path, we link to the tracking page
- * without the number instead (`landing`), and give nothing when the research
- * has no tracking page at all. The six US templates predate this rule and are
- * kept as they were.
+ * Deep links (with the number) only where the research marks the URL form as
+ * documented by the carrier or indexed on its own domain: USPS and UPS
+ * (research/programs.md Part B), Royal Mail's "linking to our website" page
+ * (whose examples include a Parcelforce number), DPD UK's search page and
+ * PostNL's step-by-step card. FedEx, DHL, Amazon and OnTrac keep the links
+ * the US launch shipped with (DHL eCommerce numbers were DHL's then).
+ *
+ * Every other carrier gets its tracking page without the number (the user
+ * pastes it): an indexed or official page where the research has one
+ * (Canada Post, Evri, PostNL, La Poste, SingPost, PTT's e-Devlet lookup),
+ * otherwise the page the research's (unverified) deep-link template points
+ * at with the number left out. Carriers whose only known URL is a results
+ * endpoint, or none at all, get null.
  */
 const PAGES: Record<Exclude<CarrierId, "unknown">, PageDef | null> = {
-  usps: { template: "https://tools.usps.com/go/TrackConfirmAction?tLabels={n}" },
-  ups: { template: "https://www.ups.com/track?loc=en_US&tracknum={n}&requester=ST/trackdetails" },
-  fedex: { template: "https://www.fedex.com/fedextrack/?trknbr={n}" },
-  dhl: { template: "https://www.dhl.com/us-en/home/tracking/tracking-express.html?submit=1&tracking-id={n}" },
-  dhl_ecommerce: { template: "https://www.dhl.com/global-en/home/tracking.html?tracking-id={n}&submit=1" },
-  amazon: { template: "https://track.amazon.com/tracking/{n}" },
-  ontrac: { template: "https://www.ontrac.com/tracking/?number={n}" },
-  canada_post: {
-    template: "https://www.canadapost-postescanada.ca/track-reperage/en#/search?searchFor={n}",
-    landing: "https://www.canadapost-postescanada.ca/track-reperage/en/",
+  usps: { link: template("https://tools.usps.com/go/TrackConfirmAction?tLabels={n}") },
+  ups: { link: template("https://www.ups.com/track?loc=en_US&tracknum={n}&requester=ST/trackdetails") },
+  fedex: { link: template("https://www.fedex.com/fedextrack/?trknbr={n}") },
+  dhl: { link: template("https://www.dhl.com/us-en/home/tracking/tracking-express.html?submit=1&tracking-id={n}") },
+  dhl_ecommerce: {
+    link: template("https://www.dhl.com/us-en/home/tracking/tracking-express.html?submit=1&tracking-id={n}"),
   },
-  purolator: { template: "https://www.purolator.com/en/shipping/tracker?pins={n}" },
-  estafeta: { template: "https://cs.estafeta.com/es/Tracking/searchByGet?wayBill={n}&isShipmentDetail=True" },
-  dhl_paket: { template: "https://www.dhl.de/en/privatkunden/dhl-sendungsverfolgung.html?piececode={n}" },
-  hermes: { template: "https://www.myhermes.de/empfangen/sendungsverfolgung/sendungsinformation#{n}" },
-  // Royal Mail's own "linking to our website" page; it also tracks Parcelforce numbers.
-  royal_mail: { template: "https://www.royalmail.com/portal/rm/track?trackNumber={n}" },
-  parcelforce: { template: "https://www.royalmail.com/portal/rm/track?trackNumber={n}" },
+  amazon: { link: template("https://track.amazon.com/tracking/{n}") },
+  ontrac: { link: template("https://www.ontrac.com/tracking/?number={n}") },
+  canada_post: { landing: "https://www.canadapost-postescanada.ca/track-reperage/en/" },
+  purolator: { landing: "https://www.purolator.com/en/shipping/tracker" },
+  estafeta: null,
+  dhl_paket: { landing: "https://www.dhl.de/en/privatkunden/dhl-sendungsverfolgung.html" },
+  hermes: { landing: "https://www.myhermes.de/empfangen/sendungsverfolgung/" },
+  royal_mail: { link: template("https://www.royalmail.com/portal/rm/track?trackNumber={n}") },
+  parcelforce: { link: template("https://www.royalmail.com/portal/rm/track?trackNumber={n}") },
   evri: { landing: "https://www.evri.com/track-a-parcel" },
-  dpd: { template: "https://track.dpd.co.uk/search?reference={n}", templateCountries: ["GB"] },
-  gls: { template: "https://gls-group.eu/EU/en/parcel-tracking?match={n}" },
-  an_post: { template: "https://www.anpost.com/Post-Parcels/Track/History?item={n}" },
-  // PostNL's documented direct link needs the destination country (B = barcode, D = country).
-  postnl: {
-    template: "https://postnl.nl/tracktrace/?B={n}&D={cc}&T=C&L=EN",
-    landing: "https://www.postnl.nl/en/receiving/parcels/track-and-trace/",
-  },
-  bpost: { template: "https://track.bpost.cloud/btr/web/#/search?itemCode={n}&lang=en" },
-  la_poste: {
-    template: "https://www.laposte.fr/outils/suivre-vos-envois?code={n}",
-    landing: "https://www.laposte.fr/outils/track-a-parcel",
-  },
-  chronopost: { template: "https://www.chronopost.fr/tracking-no-cms/suivi-page?listeNumerosLT={n}" },
+  // Indexed for DPD UK only; other DPD countries run their own trackers.
+  dpd: { link: (n, { country }) => (country === "GB" ? `https://track.dpd.co.uk/search?reference=${n}` : null) },
+  gls: { landing: "https://gls-group.eu/EU/en/parcel-tracking" },
+  an_post: { landing: "https://www.anpost.com/Post-Parcels/Track/History" },
+  postnl: { link: postnlLink, landing: "https://www.postnl.nl/en/receiving/parcels/track-and-trace/" },
+  bpost: { landing: "https://track.bpost.cloud/btr/web/" },
+  la_poste: { landing: "https://www.laposte.fr/outils/track-a-parcel" },
+  chronopost: { landing: "https://www.chronopost.fr/tracking-no-cms/suivi-page" },
   swiss_post: { landing: "https://service.post.ch/ekp-web/ui/entry/search" },
-  austrian_post: { landing: "https://www.post.at/en/s/track-and-trace-search" },
-  correos: { template: "https://www.correos.es/es/es/herramientas/localizador/envios/detalle?tracking-number={n}" },
-  poste_italiane: { template: "https://www.poste.it/cerca/index.html#/risultati-spedizioni/{n}" },
-  ctt: { template: "https://www.ctt.pt/feapl_2/app/open/objectSearch/objectSearch.jspx?objects={n}" },
-  inpost: { template: "https://inpost.pl/sledzenie-przesylek?number={n}" },
-  poczta_polska: { template: "https://emonitoring.poczta-polska.pl/?lang=en&numer={n}" },
+  austrian_post: null,
+  correos: { landing: "https://www.correos.es/es/es/herramientas/localizador" },
+  poste_italiane: { landing: "https://www.poste.it/cerca/index.html" },
+  ctt: { landing: "https://www.ctt.pt/feapl_2/app/open/objectSearch/objectSearch.jspx" },
+  inpost: { landing: "https://inpost.pl/sledzenie-przesylek" },
+  poczta_polska: { landing: "https://emonitoring.poczta-polska.pl/" },
   packeta: { landing: "https://tracking.packeta.com/en/" },
-  postnord: { template: "https://tracking.postnord.com/en/?id={n}" },
+  postnord: { landing: "https://tracking.postnord.com/en/" },
   posten_bring: { landing: "https://sporing.posten.no/" },
   posti: { landing: "https://www.posti.fi/en/tracking" },
   // e-Devlet's official PTT barcode lookup.
   ptt: { landing: "https://www.turkiye.gov.tr/ptt-gonderi-takip" },
   australia_post: { landing: "https://auspost.com.au/mypost/track/" },
-  nz_post: { template: "https://www.nzpost.co.nz/tools/tracking?trackid={n}" },
-  japan_post: { template: "https://trackings.post.japanpost.jp/services/srv/search/direct?reqCodeNo1={n}&locale=en" },
-  yamato: { template: "https://member.kms.kuronekoyamato.co.jp/parcel/detail?pno={n}" },
-  sagawa: { template: "https://k2k.sagawa-exp.co.jp/p/web/okurijosearch.do?okurijoNo={n}" },
-  korea_post: {
-    template:
-      "https://trace.epost.go.kr/xtts/servlet/kpl.tts.common.svl.SttSVL?target_command=kpl.tts.tt.epost.cmd.RetrieveEmsTraceEngCmd&JspURI=%2Fxtts%2Ftt%2Fepost%2Fems%2FEmsSearchResultEng.jsp&POST_CODE={n}",
-  },
+  nz_post: { landing: "https://www.nzpost.co.nz/tools/tracking" },
+  japan_post: null,
+  yamato: { landing: "https://toi.kuronekoyamato.co.jp/cgi-bin/tneko" },
+  // Sagawa reportedly suspended its public inquiry page (research, unverified).
+  sagawa: null,
+  korea_post: { landing: "https://service.epost.go.kr/iservice/usr/trace/usrtrc001k01.jsp" },
   cj_logistics: null,
   china_post: { landing: "https://www.ems.com.cn/mailtracking/you_jian_cha_xun.html" },
-  cainiao: { template: "https://global.cainiao.com/detail.htm?mailNoList={n}" },
-  sf_express: { template: "https://htm.sf-express.com/tw/en/dynamic_function/waybill/#search/bill-number/{n}" },
-  yunexpress: { template: "https://www.yuntrack.com/parcelTracking?id={n}" },
-  yanwen: { template: "https://track.yw56.com.cn/en/querydel?nums={n}" },
-  fourpx: { template: "https://track.4px.com/#/result/0/{n}" },
+  cainiao: { landing: "https://global.cainiao.com/" },
+  sf_express: { landing: "https://htm.sf-express.com/tw/en/dynamic_function/waybill/" },
+  yunexpress: { landing: "https://www.yuntrack.com/parcelTracking" },
+  yanwen: { landing: "https://track.yw56.com.cn/en/" },
+  fourpx: { landing: "https://track.4px.com/" },
   hongkong_post: { landing: "https://webapp.hongkongpost.hk/en/mail_tracking2/index.html" },
   singpost: { landing: "https://www.singpost.com/track-items" },
   india_post: null,
   delhivery: { landing: "https://www.delhivery.com/tracking" },
-  blue_dart: { template: "https://www.bluedart.com/trackdartresultthirdparty?trackFor=0&trackNo={n}" },
-  correios: { template: "https://rastreamento.correios.com.br/app/index.php?objetos={n}" },
-  aramex: { template: "https://www.aramex.com/us/en/track/shipments?ShipmentNumber={n}" },
+  blue_dart: null,
+  correios: { landing: "https://rastreamento.correios.com.br/app/index.php" },
+  aramex: { landing: "https://www.aramex.com/us/en/track/shipments" },
   emirates_post: null,
   smsa: null,
   israel_post: null,
@@ -206,6 +225,8 @@ export interface TrackingOptions {
    * country's national post, which tracks inbound international mail.
    */
   country?: string;
+  /** Delivery postcode; some deep links need it (PostNL for NL, BE, DE, GB and US addresses). */
+  postcode?: string;
 }
 
 export interface TrackingPage {
@@ -214,14 +235,10 @@ export interface TrackingPage {
   includesNumber: boolean;
 }
 
-function deepLink(carrier: CarrierId, n: string, country: string | null): TrackingPage | null {
+function deepLink(carrier: CarrierId, n: string, ctx: LinkContext): TrackingPage | null {
   if (carrier === "unknown") return null;
-  const page = PAGES[carrier];
-  if (!page?.template) return null;
-  if (page.templateCountries && (!country || !page.templateCountries.includes(country))) return null;
-  if (page.template.includes("{cc}") && !country) return null;
-  const url = page.template.replace("{n}", encodeURIComponent(n)).replace("{cc}", country ?? "");
-  return { url, includesNumber: true };
+  const url = PAGES[carrier]?.link?.(encodeURIComponent(n), ctx);
+  return url ? { url, includesNumber: true } : null;
 }
 
 function landingPage(carrier: CarrierId): TrackingPage | null {
@@ -233,7 +250,8 @@ function landingPage(carrier: CarrierId): TrackingPage | null {
 /**
  * The carrier's own public tracking page for `trackingNumber` (or its tracker
  * without the number when no deep link is safe), or null. With
- * `opts.country`, UPU S10 items link to the destination country's post.
+ * `opts.country`, UPU S10 items (international mail) go to that country's
+ * national post first, since the destination post tracks inbound items.
  */
 export function trackingPage(
   carrier: CarrierId,
@@ -242,12 +260,13 @@ export function trackingPage(
 ): TrackingPage | null {
   const n = trackingNumber.trim();
   if (carrier === "unknown" || n === "") return null;
-  const country = opts.country && /^[A-Za-z]{2}$/.test(opts.country) ? opts.country.toUpperCase() : null;
+  const country = opts.country && /^[A-Za-z]{2}$/.test(opts.country.trim()) ? opts.country.trim().toUpperCase() : null;
+  const postcode = opts.postcode?.trim() || null;
+  const ctx: LinkContext = { country, postcode };
   const destPost = country && parseS10(normalizeTrackingNumber(n)) ? (NATIONAL_POST[country] ?? null) : null;
   return (
-    (destPost && deepLink(destPost, n, country)) ||
-    deepLink(carrier, n, country) ||
-    (destPost && landingPage(destPost)) ||
+    (destPost && (deepLink(destPost, n, ctx) ?? landingPage(destPost))) ||
+    deepLink(carrier, n, ctx) ||
     landingPage(carrier)
   );
 }
@@ -256,7 +275,9 @@ export function trackingPage(
  * Link to the carrier's own public tracking page for `trackingNumber`, or
  * null for an unknown carrier, an empty number or a carrier without a known
  * tracking page. The number is used as given (callers pass a normalized
- * number) and URI-encoded. See {@link trackingPage} for `opts.country`.
+ * number) and URI-encoded. The page may not include the number (see
+ * {@link trackingPage}); `opts.country` sends UPU S10 items to the
+ * destination country's post.
  */
 export function trackingUrl(carrier: CarrierId, trackingNumber: string, opts: TrackingOptions = {}): string | null {
   return trackingPage(carrier, trackingNumber, opts)?.url ?? null;

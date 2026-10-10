@@ -208,10 +208,10 @@ export default function Content() {
       <h2>How to tell a real Informed Delivery email from a fake</h2>
       <p>
         Daily Digest emails currently come from{" "}
-        <code>USPSInformeddelivery@email.informeddelivery.usps.com</code>
+        <code translate="no">USPSInformeddelivery@email.informeddelivery.usps.com</code>
         , and older ones came from a similar address without the “email.”
         part. USPS package tracking emails come from{" "}
-        <code>auto-reply@usps.com</code>. A sender address can be faked,
+        <code translate="no">auto-reply@usps.com</code>. A sender address can be faked,
         though, so also check that links point to a usps.com address before
         you click, and never pay anything or enter card details from an
         email or text about a delivery.

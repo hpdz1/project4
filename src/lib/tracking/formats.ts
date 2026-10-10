@@ -107,6 +107,7 @@ export type FormatId =
   | "poste_ra"
   | "poste_uw"
   | "poste_2ima"
+  | "poste_5p"
   | "inpost_24"
   | "inpost_jjd16"
   | "poczta_px"
@@ -778,6 +779,16 @@ const INTL_FORMATS: readonly FormatDef[] = [
   shapeFormat("poste_ra", "poste_italiane", "named", 20, [13], /^RA[0-9]{11}$/, "Poste Italiane (RA)"),
   shapeFormat("poste_uw", "poste_italiane", "distinctive", 60, [13], /^[13]UW(?=(?:[A-Z]*[0-9]){6})[0-9A-Z]{10}$/, "Poste Italiane (UW)"),
   shapeFormat("poste_2ima", "poste_italiane", "distinctive", 60, [14], /^2IMA[0-9]{10}$/, "Poste Italiane (2IMA)"),
+  // One real sample (5P65D73186819); a letter after "5P" keeps it apart from Colissimo 5P + 11 digits.
+  shapeFormat(
+    "poste_5p",
+    "poste_italiane",
+    "context",
+    30,
+    [13],
+    /^5P(?=[0-9]*[A-Z])(?=(?:[A-Z]*[0-9]){6})[0-9A-Z]{11}$/,
+    "Poste Italiane (5P)",
+  ),
   // Poland, Czechia
   digitsFormat("inpost_24", "inpost", "carrier", 10, [24], "InPost (24 digits)", null),
   shapeFormat("poczta_px", "poczta_polska", "carrier", 6, [12], /^PX[0-9]{10}$/, "Poczta Polska (PX)"),

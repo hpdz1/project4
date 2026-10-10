@@ -183,8 +183,8 @@ export default function Content() {
         Choose <strong>email</strong> for at least these events if you want
         to forward them anywhere. Text and app alerts are fine for yourself
         but can’t be forwarded automatically. Genuine My Choice alerts come
-        from <code>mcinfo@ups.com</code>, and notifications started by a
-        shipper often come from <code>pkginfo@ups.com</code>. Scammers can
+        from <code translate="no">mcinfo@ups.com</code>, and notifications started by a
+        shipper often come from <code translate="no">pkginfo@ups.com</code>. Scammers can
         fake a sender address, so treat it as a hint rather than proof.
       </p>
 

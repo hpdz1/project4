@@ -7,7 +7,7 @@ export const meta: GuideMeta = {
   description:
     "The honest answer: no one can look up packages by address. The options that do work, from carrier programs to reference numbers, and the sites to avoid.",
   published: "2026-10-08",
-  updated: "2026-10-08",
+  updated: "2026-10-10",
   readingMinutes: 5,
   category: "Getting started",
 };
@@ -109,14 +109,17 @@ export default function Content() {
         <li>“has shipped”, “on its way”, “out for delivery”</li>
         <li>the shop’s name, or a carrier name such as UPS, FedEx or USPS</li>
         <li>
-          <code>1Z</code>, which starts most UPS tracking numbers
+          <code translate="no">1Z</code>, which starts most UPS tracking
+          numbers
         </li>
       </ul>
       <p>
         In Gmail you can search several carriers at once, for example{" "}
-        <code>from:(ups.com OR fedex.com OR usps.com)</code>. The word OR
-        must be in capitals. Don’t forget text messages: many shops send
-        shipping updates by SMS if you gave a phone number at checkout.
+        <code translate="no">from:(ups.com OR fedex.com OR usps.com)</code>.
+        The word OR must be in capitals. If your shops and carriers write to
+        you in another language, search for their words for “parcel” and
+        “tracking” too. Don’t forget text messages: many shops send shipping
+        updates by SMS if you gave a phone number at checkout.
       </p>
 
       <h2>Option 4: Ask the sender</h2>
@@ -147,7 +150,8 @@ export default function Content() {
       <p>
         This only works if the shipper actually entered a reference, and you
         usually have to add more details to narrow the search, such as the
-        destination ZIP code or country and the approximate ship date. The
+        destination country and ZIP or postal code, and the approximate ship
+        date. The
         exact fields change from time to time, so follow what the carrier’s
         site asks for. A reference search won’t work with just your name or
         address.
@@ -192,6 +196,27 @@ export default function Content() {
           before you have to go looking.
         </li>
       </ul>
+
+      <h2>Outside the US?</h2>
+      <p>
+        The same rule applies everywhere: no carrier will look up parcels by
+        your name or address on request, and every option above still
+        works. Two things differ abroad. Many carriers in Europe, Australia
+        and New Zealand recognise your parcels by the email address or phone
+        number you gave the shop, so their apps can list parcels with no
+        tracking number once you sign up with those same details. And orders
+        from cross-border marketplaces often change tracking number when your
+        national post or a local courier takes over, so the shop’s order page
+        is the best place to find the current one.
+      </p>
+      <p>
+        Our regional guides list what to switch on in each country:{" "}
+        <Link href="/guides/parcel-notifications-europe">Europe</Link>,{" "}
+        <Link href="/guides/parcel-notifications-asia-pacific">Asia-Pacific</Link>{" "}
+        and{" "}
+        <Link href="/guides/parcel-notifications-americas-middle-east-africa">Canada, Latin America, the Middle East and Africa</Link>
+        .
+      </p>
 
       <h2>Where Package Radar fits</h2>
       <p>

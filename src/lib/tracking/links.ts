@@ -81,6 +81,8 @@ const HOST_PARAMS: readonly [domain: string, params: readonly string[]][] = [
   ["sporing.posten.no", ["q"]],
   ["sporing.bring.no", ["q"]],
   ["bring.com", ["packagenumber"]],
+  ["bring.se", ["packagenumber"]],
+  ["bring.dk", ["packagenumber"]],
   ["postnl.nl", ["b"]],
   ["postnl.post", ["barcodes"]],
   ["laposte.fr", ["code", "idship"]],
@@ -118,6 +120,10 @@ const HOST_PARAMS: readonly [domain: string, params: readonly string[]][] = [
   ["sprawdz.dhl.com.pl", ["sn"]],
   ["track.dhlecommerce.co.uk", ["con"]],
   ["track.dhlparcel.co.uk", ["con"]],
+  // Legacy DHL Paket tracker (nolp.dhl.de/nextt-online-public/set_identcodes.do?idc=...).
+  ["dhl.de", ["idc"]],
+  // SMSA's templates disagree across sources (?tracknumbers=, ?trackno=, ?awb=).
+  ["smsaexpress.com", ["tracknumbers", "trackno"]],
 ];
 
 /** Parameters whose value names the carrier on branded tracking pages. */

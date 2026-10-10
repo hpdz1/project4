@@ -60,6 +60,10 @@ export const viewport: Viewport = {
 export default function RootLayout({
   children,
 }: Readonly<{ children: ReactNode }>) {
+  // English only, for visitors in every country: browsers offer to translate
+  // pages whose declared language differs from the user's, so lang="en" must
+  // stay accurate. Values that must not be translated (brand name, forwarding
+  // addresses, filter queries, tracking numbers, codes) carry translate="no".
   return (
     <html
       lang="en"

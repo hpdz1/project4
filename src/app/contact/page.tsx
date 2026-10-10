@@ -1,9 +1,10 @@
 import Link from "next/link";
+import { Brand } from "@/components/site/Brand";
 import { Callout } from "@/components/ui/Callout";
 import { Card } from "@/components/ui/Card";
 import { Container } from "@/components/ui/Container";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { CONTACT_EMAIL, SITE_NAME, pageMetadata } from "@/lib/site";
+import { CONTACT_EMAIL, PRIVACY_EMAIL, pageMetadata } from "@/lib/site";
 
 export const metadata = pageMetadata({
   title: "Contact",
@@ -18,7 +19,13 @@ export default function ContactPage() {
       <PageHeader
         eyebrow="Contact"
         title="Get in touch"
-        description={`Questions about setup, carrier emails ${SITE_NAME} didn't understand, privacy requests and ideas are all welcome.`}
+        description={
+          <>
+            Questions about setup, carrier emails <Brand /> didn&apos;t
+            understand, privacy requests and ideas are all welcome, from
+            anywhere in the world.
+          </>
+        }
       />
 
       <Card padding="lg" className="mb-10 space-y-2">
@@ -26,34 +33,51 @@ export default function ContactPage() {
         <p>
           <a
             href={`mailto:${CONTACT_EMAIL}`}
+            translate="no"
             className="text-lg font-semibold break-all text-accent underline underline-offset-4"
           >
             {CONTACT_EMAIL}
           </a>
         </p>
         <p className="text-[0.9375rem] text-muted">
-          We aim to reply within a few business days.
+          We aim to reply within a few business days, wherever you are.
         </p>
+        {PRIVACY_EMAIL !== CONTACT_EMAIL ? (
+          <p className="text-[0.9375rem] text-muted">
+            Privacy and data requests:{" "}
+            <a
+              href={`mailto:${PRIVACY_EMAIL}`}
+              translate="no"
+              className="font-medium break-all text-accent underline underline-offset-4"
+            >
+              {PRIVACY_EMAIL}
+            </a>
+          </p>
+        ) : null}
       </Card>
 
       <div className="article">
         <h2 id="what-to-include">What to include</h2>
         <ul>
           <li>
-            <strong>Setup questions:</strong> which carrier program or email
-            provider (Gmail, Outlook, iCloud, Yahoo…) you&apos;re working with,
-            and the step where you got stuck.
+            <strong>Setup questions:</strong> your country, which carrier
+            program or postal service, and which email provider (Gmail,
+            Outlook, iCloud, Yahoo, GMX…) you&apos;re working with, and the
+            step where you got stuck.
           </li>
           <li>
-            <strong>A carrier email we missed or misread:</strong> the carrier,
-            roughly when the email arrived, and what the dashboard showed. You
-            may include the tracking number if you&apos;re comfortable sharing
-            it.
+            <strong>A carrier email we missed or misread:</strong> the carrier
+            or postal service, the language of the email, roughly when it
+            arrived, and what the dashboard showed. You may include the
+            tracking number if you&apos;re comfortable sharing it.
           </li>
           <li>
             <strong>Privacy or data requests:</strong> what you&apos;d like us
-            to do. If you can&apos;t sign in any more, include your forwarding
-            address (it starts with <code>r-</code>) so we can find your radar.
+            to do. You can download or delete all your data yourself in your
+            dashboard settings. If you can&apos;t sign in any more, include
+            your forwarding address (it starts with{" "}
+            <code translate="no">r-</code>) so we can find your radar. Our{" "}
+            <Link href="/privacy">privacy policy</Link> explains your rights.
           </li>
         </ul>
         <p>
@@ -64,9 +88,9 @@ export default function ContactPage() {
 
       <Callout tone="warning" title="We can't track packages for you" className="mt-10">
         <p>
-          {SITE_NAME} can only show what your carriers&apos; own alerts tell
-          you, and we can&apos;t look up a package, an address or a tracking
-          number on anyone&apos;s behalf. For a late, missing or damaged
+          <Brand /> can only show what your carriers&apos; and postal
+          services&apos; own alerts tell you, and we can&apos;t look up a
+          package, an address or a tracking number on anyone&apos;s behalf. For a late, missing or damaged
           package, contact the sender or the carrier directly. Our{" "}
           <Link href="/guides" className="font-medium underline underline-offset-4">
             guides

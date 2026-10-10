@@ -5,10 +5,10 @@ export const meta: GuideMeta = {
   slug: "parcel-notifications-asia-pacific",
   title: "How to get notified about parcels coming to you in Asia-Pacific",
   description:
-    "Which carriers in Japan, Korea, China, India, Australia, New Zealand and Southeast Asia alert you about incoming parcels, and what to expect from Temu-style orders.",
+    "Which carriers in Japan, Korea, China, India, Australia, New Zealand and Southeast Asia tell you about incoming parcels, and what to expect from Temu orders.",
   published: "2026-10-10",
   updated: "2026-10-10",
-  readingMinutes: 10,
+  readingMinutes: 9,
   category: "Around the world",
 };
 

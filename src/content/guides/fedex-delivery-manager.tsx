@@ -133,7 +133,7 @@ export default function Content() {
       <p>
         Pick <strong>email</strong> as the channel if you want to forward the
         alerts or keep a record. Delivery Manager emails come from{" "}
-        <code>TrackingUpdates@fedex.com</code> with the display name “FedEx
+        <code translate="no">TrackingUpdates@fedex.com</code> with the display name “FedEx
         Delivery Manager”, and delivery emails can include a photo of where
         the package was left. As always, a sender name can be faked, so if a
         message asks for money, go to fedex.com yourself instead of tapping a

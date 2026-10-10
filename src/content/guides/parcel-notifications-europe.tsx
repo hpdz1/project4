@@ -195,7 +195,7 @@ export default function Content() {
       <p>
         In Ireland, <strong>An Post</strong> lists tracked parcels that match
         your email address or phone number in the My deliveries section of
-        your account and app, including parcels you’re sending (see{" "}
+        its website and app, including parcels you’re sending (see{" "}
         <a href="https://www.anpost.com/Post-Parcels/Receiving/My-deliveries" rel="noopener noreferrer" target="_blank">An Post’s My deliveries page</a>
         ). Sign up with the email and number you shop with, because a backup
         delivery option only works when the retailer passed those details on.
@@ -298,8 +298,7 @@ export default function Content() {
 
       <h2>France, Spain, Italy and Portugal</h2>
       <p>
-        Southern Europe relies mostly on the shop passing your contact
-        details to the carrier, so the email you use at checkout matters
+        Here the shop passing your contact details to the carrier matters
         most.
       </p>
       <ul>
@@ -414,39 +413,25 @@ export default function Content() {
 
       <h2>Spotting fake parcel messages</h2>
       <p>
-        Parcel scams are as common in Europe as anywhere else, and they often
-        copy the local carrier’s name and logo. A few habits help:
-      </p>
-      <ul>
-        <li>
-          Posti and Swiss Post both warn that scammers fake the sender name
-          and number, so a familiar sender isn’t proof on its own.
-        </li>
-        <li>
-          If a message asks for a small payment, a customs fee or your card
-          details to release a parcel, don’t use its link. Open the carrier’s
-          app or type its web address yourself and look the parcel up there.
-        </li>
-        <li>
-          A parcel you’re genuinely expecting will also show up in the
-          carrier’s app once you’ve signed up as described above, which makes
-          a message about a parcel that isn’t there easy to doubt.
-        </li>
-      </ul>
-      <p>
-        Our{" "}
+        Parcel scams are as common in Europe as anywhere, and they copy the
+        local carrier’s name and logo. Posti and Swiss Post both warn that
+        scammers fake the sender name and number, so a familiar sender isn’t
+        proof on its own. If a message asks for a small payment, a customs
+        fee or card details to release a parcel, don’t use its link: open the
+        carrier’s app yourself and look the parcel up there. Once you’ve
+        signed up as described above, a genuine parcel will be listed. Our{" "}
         <Link href="/guides/fake-delivery-text-scams">guide to fake delivery texts</Link>{" "}
-        walks through the warning signs in more detail.
+        walks through the warning signs.
       </p>
 
       <h2>Putting it all in one place</h2>
       <p>
-        With three or four apps switched on, the answer to “is anything
-        coming?” is spread across several places. <span translate="no">Package Radar</span>{" "}
-        collects the emails your carriers and shops send you: you add one
-        email filter that forwards those notices to your personal{" "}
+        With several apps switched on, the answer to “is anything coming?”
+        is spread across several places. <span translate="no">Package Radar</span>{" "}
+        collects the emails your carriers and shops send you: one email
+        filter forwards them to your personal{" "}
         <span translate="no">Package Radar</span> address, and we turn them
-        into one list of what’s arriving. A few tips for Europe:
+        into one list. A few tips for Europe:
       </p>
       <ul>
         <li>
@@ -459,8 +444,7 @@ export default function Content() {
         </li>
         <li>
           Forward shop emails as well, such as Amazon’s or Allegro’s shipping
-          updates, since they cover parcels from carriers you haven’t signed
-          up with.
+          updates; they cover carriers you haven’t signed up with.
         </li>
         <li>
           Emails in German, French, Polish or any other language are fine to
