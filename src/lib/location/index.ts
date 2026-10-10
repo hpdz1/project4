@@ -6,6 +6,7 @@ export {
   SUPPORTED_COUNTRY_CODES,
   USPS_SERVED_COUNTRY_CODES,
   countryName,
+  countryNameInSentence,
   isCountryCode,
   normalizeCountryCode,
 } from "./countries";

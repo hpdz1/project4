@@ -9,6 +9,9 @@ import * as fakeDeliveryTextScams from "./fake-delivery-text-scams";
 import * as fedexDeliveryManager from "./fedex-delivery-manager";
 import * as howToSeeEveryPackage from "./how-to-see-every-package-coming-to-your-address";
 import * as packageSaysDelivered from "./package-says-delivered-but-not-here";
+import * as parcelNotificationsAmericasMea from "./parcel-notifications-americas-middle-east-africa";
+import * as parcelNotificationsAsiaPacific from "./parcel-notifications-asia-pacific";
+import * as parcelNotificationsEurope from "./parcel-notifications-europe";
 import * as packageYouDidntOrder from "./package-you-didnt-order";
 import * as trackWithoutNumber from "./track-a-package-without-a-tracking-number";
 import type { Guide, GuideMeta } from "./types";
@@ -36,6 +39,9 @@ export const GUIDES: Guide[] = [
   fakeDeliveryTextScams,
   packageYouDidntOrder,
   packageSaysDelivered,
+  parcelNotificationsEurope,
+  parcelNotificationsAsiaPacific,
+  parcelNotificationsAmericasMea,
 ].map(toGuide);
 
 const GUIDES_BY_SLUG: ReadonlyMap<string, Guide> = new Map(

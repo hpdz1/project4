@@ -1,7 +1,7 @@
 import {
   OTHER_COUNTRY_CODE,
   USPS_SERVED_COUNTRY_CODES,
-  countryName,
+  countryNameInSentence,
   isCountryCode,
   normalizeCountryCode,
 } from "@/lib/location/countries";
@@ -245,7 +245,7 @@ function countryPlan(code: string): CountryPlan {
   const account = [...ids("account"), ...(hasAmazon ? ["amazon_orders"] : [])];
   const perPackage = [...ids("per_package"), "dhl_on_demand", ...(code === "CA" ? [] : ["fedex_delivery_manager_intl"])];
 
-  const name = countryName(code);
+  const name = countryNameInSentence(code);
   const carriers = national.filter((p) => !RETAILER_IDS.has(p.id));
   const silent = carriers.filter((p) => !hasForwardableEmail(p, code)).map((p) => p.name);
   const gaps = [

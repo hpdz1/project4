@@ -119,3 +119,14 @@ export function countryName(code: string): string {
   if (normalized && NAMES.has(normalized)) return NAMES.get(normalized) ?? normalized;
   return normalized ?? (typeof code === "string" ? code.trim() : "");
 }
+
+/**
+ * The English name as it reads mid-sentence, with "the" where English uses it:
+ * "the United States", "the Netherlands", "the Cayman Islands", but "Germany".
+ */
+export function countryNameInSentence(code: string): string {
+  const name = countryName(code);
+  return /^(?:United |Netherlands$|Philippines$|Bahamas$|Gambia$|Maldives$)|Republic$|Islands$/.test(name)
+    ? `the ${name}`
+    : name;
+}

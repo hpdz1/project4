@@ -155,7 +155,7 @@ export function describeStoreContract(name: string, create: () => Store): void {
           "Bad-Key": "done",
           x: "done",
           ["a".repeat(65)]: "done",
-          __proto__: "done",
+          ["__proto__"]: "done",
           dhl_paket_app: "maybe",
         } as unknown as Record<string, "done" | "skipped">;
         const updated = await store.updateAccount("acc_1", { programs }, NOW);

@@ -4,6 +4,7 @@ import {
   SUPPORTED_COUNTRY_CODES,
   USPS_SERVED_COUNTRY_CODES,
   countryName,
+  countryNameInSentence,
   normalizeCountryCode,
 } from "./countries";
 import { DISTINCTIVE_POSTCODES, countryHasNoPostcodes, postcodeFormat, postcodeSpec, type PostcodeSpec } from "./postcodes";
@@ -866,7 +867,8 @@ function parseFor(country: string, toks: Tok[]): CountryParse {
       break;
     }
     case OTHER_COUNTRY_CODE:
-      return parseNoPostcode(toks);
+      // "Other": we don't know the format, so keep a postcode-like token if there clearly is one.
+      return parseLoose(toks);
   }
   if (countryHasNoPostcodes(country)) return parseNoPostcode(toks);
   const spec = postcodeSpec(country);
@@ -879,13 +881,6 @@ function parseFor(country: string, toks: Tok[]): CountryParse {
     );
   }
   return parseLoose(toks);
-}
-
-/** "the United States", "the Netherlands", but "Germany". */
-function countryWithArticle(name: string): string {
-  return /^(?:United |Netherlands$|Philippines$|Bahamas$|Gambia$|Maldives$)|Republic$|Islands$/.test(name)
-    ? `the ${name}`
-    : name;
 }
 
 /** The US and the territories USPS serves are one postal area: never suggest switching between them. */
@@ -952,7 +947,7 @@ export function parseLocation(input: string, countryHint?: string): ParsedLocati
   if (detected && !samePostalArea(detected, country) && SUPPORTED_COUNTRY_CODES.has(detected)) {
     const name = countryName(detected);
     warnings.push(
-      `This looks like an address in ${countryWithArticle(name)}. Choose ${name} as your country if that's right.`,
+      `This looks like an address in ${countryNameInSentence(detected)}. Choose ${name} as your country if that's right.`,
     );
   }
   return {

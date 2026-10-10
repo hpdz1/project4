@@ -317,6 +317,14 @@ describe("parseLocation: other countries", () => {
       warnings: [],
     });
     expect(parseLocation("anything", OTHER_COUNTRY_CODE)).toMatchObject({ country: "ZZ", postalCode: null, warnings: [] });
+    // "Other" keeps a postcode-like token when there clearly is one, and never warns about a missing one.
+    expect(parseLocation("Main Road 12, 3000 Somewhere", OTHER_COUNTRY_CODE)).toMatchObject({
+      country: "ZZ",
+      postalCode: "3000",
+      city: "Somewhere",
+      warnings: [],
+    });
+    expect(parseLocation("Main Road 1234", OTHER_COUNTRY_CODE)).toMatchObject({ postalCode: null, warnings: [] });
     expect(parseLocation("10 Rue de Rivoli, 75001 Paris, France")).toEqual({
       country: "FR",
       postalCode: "75001",

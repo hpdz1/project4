@@ -11,14 +11,23 @@ import type { AccountRecord, Store } from "./types";
 export type {
   AccountPatch,
   AccountRecord,
+  AccountSnapshot,
   CreateAccountInput,
   EmailLogEntry,
   EmailStats,
+  PurgeResult,
   Store,
 } from "./types";
 export { applyShipmentUpdates, type ShipmentRows } from "./apply";
 export { DuplicateAccountError } from "./errors";
-export { EMAIL_LOG_LIMIT, VERIFICATION_LIMIT } from "./limits";
+export {
+  DELIVERED_RETENTION_MS,
+  EMAIL_LOG_LIMIT,
+  EMAIL_LOG_RETENTION_MS,
+  STALE_SHIPMENT_RETENTION_MS,
+  VERIFICATION_LIMIT,
+  VERIFICATION_RETENTION_MS,
+} from "./limits";
 export { compareShipmentsNewestFirst, dedupeKey, mergeShipment } from "./merge";
 export { MemoryStore } from "./memory";
 export { SqliteStore } from "./sqlite";

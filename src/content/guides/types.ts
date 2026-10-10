@@ -1,7 +1,12 @@
 import type { JSX } from "react";
 
 /** Where a guide is listed on /guides. */
-export type GuideCategory = "Getting started" | "Carriers" | "Safety" | "Troubleshooting";
+export type GuideCategory =
+  | "Getting started"
+  | "Around the world"
+  | "Carriers"
+  | "Safety"
+  | "Troubleshooting";
 
 export interface GuideMeta {
   /** URL slug; matches the article's file name (`<slug>.tsx`). */

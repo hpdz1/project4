@@ -5,6 +5,7 @@ import {
   SUPPORTED_COUNTRY_CODES,
   countryHasNoPostcodes,
   countryName,
+  countryNameInSentence,
   isCountryCode,
   normalizeCountryCode,
   postcodeFormat,
@@ -62,6 +63,21 @@ describe("countryName", () => {
     ["", ""],
   ])("%j -> %j", (code, name) => {
     expect(countryName(code)).toBe(name);
+  });
+});
+
+describe("countryNameInSentence", () => {
+  it.each([
+    ["US", "the United States"],
+    ["NL", "the Netherlands"],
+    ["AE", "the United Arab Emirates"],
+    ["KY", "the Cayman Islands"],
+    ["DO", "the Dominican Republic"],
+    ["DE", "Germany"],
+    ["JP", "Japan"],
+    ["ZZ", "Other"],
+  ])("%s -> %s", (code, text) => {
+    expect(countryNameInSentence(code)).toBe(text);
   });
 });
 

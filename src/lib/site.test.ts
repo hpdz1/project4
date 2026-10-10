@@ -1,14 +1,20 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  DEFAULT_OPERATOR_NAME,
+  LEGAL_EFFECTIVE_DATE,
   SITE_NAME,
   absoluteUrl,
   adsenseScriptSrc,
   buildSitemap,
+  missingOperatorSettings,
   normalizeContactEmail,
   normalizeSiteUrl,
   pageMetadata,
   parseAdSlot,
   parseAdsenseClient,
+  parseOperator,
+  parseOperatorCountry,
+  parseOptionalText,
   publisherIdFromClient,
 } from "./site";
 
@@ -50,6 +56,107 @@ describe("normalizeContactEmail", () => {
     expect(normalizeContactEmail(undefined)).toBe("hello@example.com");
     expect(normalizeContactEmail("nope")).toBe("hello@example.com");
     expect(normalizeContactEmail("a b@c.d")).toBe("hello@example.com");
+  });
+
+  it("falls back to a given address", () => {
+    expect(normalizeContactEmail(undefined, "team@x.example")).toBe("team@x.example");
+    expect(normalizeContactEmail("nope", "team@x.example")).toBe("team@x.example");
+    expect(normalizeContactEmail("p@x.example", "team@x.example")).toBe("p@x.example");
+  });
+});
+
+describe("legal pages", () => {
+  it("are effective from the worldwide rewrite", () => {
+    expect(LEGAL_EFFECTIVE_DATE).toBe("2026-10-10");
+  });
+});
+
+describe("parseOptionalText", () => {
+  it("is null when unset or blank", () => {
+    expect(parseOptionalText(undefined)).toBeNull();
+    expect(parseOptionalText("")).toBeNull();
+    expect(parseOptionalText("  \n\t ")).toBeNull();
+  });
+
+  it("trims and collapses whitespace", () => {
+    expect(parseOptionalText("  Example Labs \n Ltd ")).toBe("Example Labs Ltd");
+  });
+
+  it("caps very long values at 300 characters", () => {
+    const value = parseOptionalText("x".repeat(500));
+    expect(value).toHaveLength(300);
+  });
+});
+
+describe("parseOperatorCountry", () => {
+  it("turns ISO codes into English country names", () => {
+    expect(parseOperatorCountry("DE")).toBe("Germany");
+    expect(parseOperatorCountry(" gb ")).toBe("United Kingdom");
+    expect(parseOperatorCountry("US")).toBe("United States");
+  });
+
+  it("keeps unknown codes and free text as typed", () => {
+    expect(parseOperatorCountry("QQ")).toBe("QQ");
+    expect(parseOperatorCountry("ZZ")).toBe("ZZ");
+    expect(parseOperatorCountry("the State of Delaware, United States")).toBe(
+      "the State of Delaware, United States",
+    );
+  });
+
+  it("is null when unset", () => {
+    expect(parseOperatorCountry(undefined)).toBeNull();
+    expect(parseOperatorCountry("   ")).toBeNull();
+  });
+});
+
+describe("parseOperator", () => {
+  it("defaults to a generic name and the contact email", () => {
+    const operator = parseOperator({}, "hello@x.example");
+    expect(operator).toEqual({
+      name: DEFAULT_OPERATOR_NAME,
+      nameIsSet: false,
+      address: null,
+      country: null,
+      euRepresentative: null,
+      ukRepresentative: null,
+      privacyEmail: "hello@x.example",
+    });
+    expect(DEFAULT_OPERATOR_NAME).toBe("the operator of Package Radar");
+    expect(missingOperatorSettings(operator)).toEqual([
+      "NEXT_PUBLIC_OPERATOR_NAME",
+      "NEXT_PUBLIC_OPERATOR_ADDRESS",
+      "NEXT_PUBLIC_OPERATOR_COUNTRY",
+    ]);
+  });
+
+  it("reads every configured value", () => {
+    const operator = parseOperator(
+      {
+        name: " Example Labs Ltd ",
+        address: "1 Sample Street,\n London EC1A 1AA, United Kingdom",
+        country: "gb",
+        euRepresentative: "Rep Co GmbH, Berlin",
+        ukRepresentative: "UK Rep Ltd, Leeds",
+        privacyEmail: "privacy@x.example",
+      },
+      "hello@x.example",
+    );
+    expect(operator).toEqual({
+      name: "Example Labs Ltd",
+      nameIsSet: true,
+      address: "1 Sample Street, London EC1A 1AA, United Kingdom",
+      country: "United Kingdom",
+      euRepresentative: "Rep Co GmbH, Berlin",
+      ukRepresentative: "UK Rep Ltd, Leeds",
+      privacyEmail: "privacy@x.example",
+    });
+    expect(missingOperatorSettings(operator)).toEqual([]);
+  });
+
+  it("ignores an invalid privacy email", () => {
+    expect(parseOperator({ privacyEmail: "not an email" }, "hello@x.example").privacyEmail).toBe(
+      "hello@x.example",
+    );
   });
 });
 
@@ -139,6 +246,65 @@ describe("env-derived constants", () => {
     const site = await import("./site");
     expect(site.SITE_URL).toBe("https://packageradar.example");
     expect(site.CONTACT_EMAIL).toBe("support@packageradar.example");
+  });
+
+  it("reads the operator identity", async () => {
+    vi.stubEnv("NEXT_PUBLIC_CONTACT_EMAIL", "support@packageradar.example");
+    vi.stubEnv("NEXT_PUBLIC_OPERATOR_NAME", "Example Labs Ltd");
+    vi.stubEnv("NEXT_PUBLIC_OPERATOR_ADDRESS", "1 Sample Street, London");
+    vi.stubEnv("NEXT_PUBLIC_OPERATOR_COUNTRY", "DE");
+    vi.stubEnv("NEXT_PUBLIC_EU_REPRESENTATIVE", "Rep Co GmbH");
+    vi.stubEnv("NEXT_PUBLIC_UK_REPRESENTATIVE", "UK Rep Ltd");
+    vi.stubEnv("NEXT_PUBLIC_PRIVACY_EMAIL", "privacy@packageradar.example");
+    vi.resetModules();
+    const site = await import("./site");
+    expect(site.OPERATOR).toEqual({
+      name: "Example Labs Ltd",
+      nameIsSet: true,
+      address: "1 Sample Street, London",
+      country: "Germany",
+      euRepresentative: "Rep Co GmbH",
+      ukRepresentative: "UK Rep Ltd",
+      privacyEmail: "privacy@packageradar.example",
+    });
+    expect(site.PRIVACY_EMAIL).toBe("privacy@packageradar.example");
+  });
+
+  it("defaults the operator identity and privacy email", async () => {
+    for (const name of [
+      "NEXT_PUBLIC_OPERATOR_NAME",
+      "NEXT_PUBLIC_OPERATOR_ADDRESS",
+      "NEXT_PUBLIC_OPERATOR_COUNTRY",
+      "NEXT_PUBLIC_EU_REPRESENTATIVE",
+      "NEXT_PUBLIC_UK_REPRESENTATIVE",
+      "NEXT_PUBLIC_PRIVACY_EMAIL",
+    ]) {
+      vi.stubEnv(name, "");
+    }
+    vi.stubEnv("NEXT_PUBLIC_CONTACT_EMAIL", "support@packageradar.example");
+    vi.resetModules();
+    const site = await import("./site");
+    expect(site.OPERATOR.name).toBe("the operator of Package Radar");
+    expect(site.OPERATOR.nameIsSet).toBe(false);
+    expect(site.OPERATOR.address).toBeNull();
+    expect(site.OPERATOR.country).toBeNull();
+    expect(site.OPERATOR.euRepresentative).toBeNull();
+    expect(site.OPERATOR.ukRepresentative).toBeNull();
+    expect(site.PRIVACY_EMAIL).toBe("support@packageradar.example");
+  });
+
+  it("shows operator placeholders in development only", async () => {
+    vi.stubEnv("NODE_ENV", "development");
+    vi.resetModules();
+    expect((await import("./site")).showOperatorPlaceholders).toBe(true);
+
+    vi.stubEnv("NODE_ENV", "production");
+    vi.resetModules();
+    expect((await import("./site")).showOperatorPlaceholders).toBe(false);
+
+    vi.stubEnv("NODE_ENV", "test");
+    vi.resetModules();
+    expect((await import("./site")).showOperatorPlaceholders).toBe(false);
   });
 });
 

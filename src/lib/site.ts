@@ -78,6 +78,7 @@ export function parseOperatorCountry(raw: string | undefined): string | null {
   if (!value) return null;
   if (/^[A-Za-z]{2}$/.test(value)) {
     const code = value.toUpperCase();
+    if (code === "ZZ") return code; // "Unknown Region"
     try {
       const name = new Intl.DisplayNames(["en"], { type: "region" }).of(code);
       if (name && name !== code) return name;

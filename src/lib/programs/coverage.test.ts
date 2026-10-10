@@ -72,6 +72,9 @@ describe("getCoverage: every country", () => {
     );
     expect(ids(getCoverage("MX", null)).address).toEqual([]);
     expect(ids(getCoverage("JP", null)).address).toContain("ups_my_choice");
+    expect(getCoverage("AE", null).gaps).toContain(
+      "UPS My Choice is offered in many countries, but we couldn't confirm it's available in the United Arab Emirates. If UPS delivers to you, check ups.com.",
+    );
   });
 });
 
