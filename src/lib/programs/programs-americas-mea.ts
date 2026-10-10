@@ -158,6 +158,32 @@ export const AMERICAS_MEA_PROGRAMS: Program[] = [
   },
 
   {
+    id: "aramex_emails",
+    name: "Aramex delivery emails",
+    operator: "Aramex",
+    carrier: "aramex",
+    countries: ["AE", "SA"],
+    kind: "per_package",
+    shows:
+      "Emails about one Aramex shipment at a time when the shop gives Aramex your email address; here Aramex has no account that lists everything coming to you.",
+    cost: "Free",
+    signupUrl: "https://www.aramex.com/",
+    dashboardUrl: null,
+    verification: "None: Aramex emails you when the shop passes on your email address.",
+    setupTime: "Nothing to set up",
+    emailAlerts: {
+      howToEnable: ["There's no setting to turn on: Aramex emails you about a shipment when the shop passes on your email address."],
+      senders: ["epod@aramex.com"],
+    },
+    parserSupport: "basic",
+    gotchas: [
+      "Aramex's Receiving mode, which lists parcels sent to your email address, is only offered in Australia and New Zealand.",
+      "We've only confirmed the address Aramex's delivery confirmations come from, so some other Aramex emails may not be forwarded automatically.",
+    ],
+    guideSlug: null,
+  },
+
+  {
     id: "noon_orders",
     name: "noon order emails",
     operator: "noon",

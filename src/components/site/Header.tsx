@@ -23,7 +23,8 @@ export function Header() {
           className="flex items-center gap-2.5 rounded-lg py-1 text-lg font-bold tracking-tight text-text"
         >
           <LogoMark />
-          <span>{SITE_NAME}</span>
+          {/* The brand name must survive browser translation. */}
+          <span translate="no">{SITE_NAME}</span>
         </Link>
         <nav aria-label="Main" className="-mx-3 w-[calc(100%+1.5rem)] sm:mx-0 sm:w-auto">
           <ul className="flex flex-wrap items-center gap-1 sm:gap-2">

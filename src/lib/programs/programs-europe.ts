@@ -543,7 +543,7 @@ export const EUROPE_PROGRAMS: Program[] = [
     setupTime: "About 5 minutes",
     emailAlerts: {
       howToEnable: [SHOP_SHARES_EMAIL("DPD"), "Sign up for myDPD with the email address you shop with."],
-      senders: ["noreply@service.dpd.de", "no-reply@dpd.de"],
+      senders: ["noreply@service.dpd.de", "no-reply@dpd.de", "express.onlineservice@dpd.de"],
     },
     parserSupport: "basic",
     gotchas: [
@@ -599,6 +599,29 @@ export const EUROPE_PROGRAMS: Program[] = [
     },
     parserSupport: "basic",
     gotchas: ["Parcels only appear if the shop gave DPD the same phone number or email address."],
+    guideSlug: null,
+  },
+
+  {
+    id: "dpd_be",
+    name: "myDPD consignee profile (Belgium)",
+    operator: "DPD Belgium",
+    carrier: "dpd",
+    countries: ["BE"],
+    kind: "account",
+    shows:
+      "DPD parcels appear in your myDPD profile automatically when the shop gave DPD the email address or phone number in your profile and the parcel's postcode matches yours.",
+    cost: "Free",
+    signupUrl: "https://www.dpd.com/be/en/",
+    dashboardUrl: null,
+    verification: "A myDPD profile with your email address, phone number and postcode.",
+    setupTime: "About 5 minutes",
+    emailAlerts: NO_EMAIL_ALERTS,
+    parserSupport: "basic",
+    gotchas: [
+      "A parcel only matches when both your postcode and the email address or phone number the shop gave DPD match your profile.",
+      NO_CONFIRMED_SENDER("DPD Belgium"),
+    ],
     guideSlug: null,
   },
 

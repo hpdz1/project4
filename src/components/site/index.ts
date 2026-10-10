@@ -1,4 +1,6 @@
+export { Brand } from "./Brand";
 export { Breadcrumbs, type Crumb } from "./Breadcrumbs";
+export { DevPlaceholder } from "./DevPlaceholder";
 export { CARRIER_DISCLAIMER, Footer } from "./Footer";
 export { Header } from "./Header";
 export { JsonLd } from "./JsonLd";

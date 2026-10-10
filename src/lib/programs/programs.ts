@@ -338,7 +338,7 @@ const CORE_PROGRAMS: Readonly<Record<ProgramId, Program>> = {
     id: "canada_post_auto_tracking",
     name: "Canada Post automatic tracking",
     operator: "Canada Post",
-    carrier: null,
+    carrier: "canada_post",
     countries: ["CA"],
     kind: "address",
     shows:
@@ -373,7 +373,7 @@ const CORE_PROGRAMS: Readonly<Record<ProgramId, Program>> = {
     id: "royal_mail_app",
     name: "Royal Mail app",
     operator: "Royal Mail",
-    carrier: null,
+    carrier: "royal_mail",
     countries: ["GB"],
     kind: "per_package",
     shows:
@@ -401,7 +401,7 @@ const CORE_PROGRAMS: Readonly<Record<ProgramId, Program>> = {
     id: "evri_app",
     name: "Evri app",
     operator: "Evri",
-    carrier: null,
+    carrier: "evri",
     countries: ["GB"],
     kind: "account",
     shows: "Evri parcels sent to the email address on your Evri account are added to your tracking list automatically.",
@@ -429,7 +429,7 @@ const CORE_PROGRAMS: Readonly<Record<ProgramId, Program>> = {
     id: "dpd_uk_app",
     name: "DPD app (UK)",
     operator: "DPD UK",
-    carrier: null,
+    carrier: "dpd",
     countries: ["GB"],
     kind: "account",
     shows:
@@ -458,7 +458,7 @@ const CORE_PROGRAMS: Readonly<Record<ProgramId, Program>> = {
     id: "postnl_account",
     name: "PostNL account and app",
     operator: "PostNL",
-    carrier: null,
+    carrier: "postnl",
     countries: ["NL"],
     kind: "address",
     shows:
@@ -489,7 +489,7 @@ const CORE_PROGRAMS: Readonly<Record<ProgramId, Program>> = {
     id: "dhl_paket_de",
     name: "DHL Paketankündigung (Post & DHL app)",
     operator: "Deutsche Post / DHL",
-    carrier: "dhl",
+    carrier: "dhl_paket",
     countries: ["DE"],
     kind: "address",
     shows:
@@ -505,7 +505,14 @@ const CORE_PROGRAMS: Readonly<Record<ProgramId, Program>> = {
         "Sign in to your DHL customer account at dhl.de or in the Post & DHL app.",
         "Turn on Paketankündigung (parcel announcement) and choose email.",
       ],
-      senders: ["noreply@dhl.de", "no-reply@dhl.de"],
+      senders: [
+        "noreply@dhl.de",
+        "no-reply@dhl.de",
+        "paketankuendigung@dhl.de",
+        "zustellung@dhl.de",
+        "sendungsupdate@dhl.de",
+        "no-reply@deutschepost.de",
+      ],
     },
     parserSupport: "basic",
     gotchas: [
@@ -519,7 +526,7 @@ const CORE_PROGRAMS: Readonly<Record<ProgramId, Program>> = {
     id: "australia_post_mypost",
     name: "Australia Post MyPost",
     operator: "Australia Post",
-    carrier: null,
+    carrier: "australia_post",
     countries: ["AU"],
     kind: "account",
     shows:

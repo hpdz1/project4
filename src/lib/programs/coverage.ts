@@ -131,7 +131,7 @@ const COUNTRY_GAPS: Readonly<Record<string, string[]>> = {
     "An Post matches parcels by email address and phone number, not by address; other couriers only contact you when the shop shares your details.",
   ],
   BE: [
-    "bpost matches parcels by email address, not by address; DPD, PostNL and other couriers only contact you when the shop shares your details.",
+    "bpost matches parcels by email address, and DPD by email address or phone number plus your postcode, not by your full address; PostNL and other couriers only contact you when the shop shares your details.",
   ],
   PL: [
     "Polish carriers match parcels to your phone number or email address, not your address.",

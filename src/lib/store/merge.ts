@@ -3,12 +3,13 @@ import { compareIso, maxIso, minIso } from "./time";
 
 /**
  * Row identity for a shipment within an account: "tn:<tracking number>"
- * (any carrier), else "order:<carrier>:<order ref>", else null (the update
- * cannot be stored).
+ * (any carrier), else "order:<order ref>" (any carrier, so a FedEx or UPS
+ * email whose reference is an Amazon order number finds the Amazon order's
+ * row), else null (the update cannot be stored).
  */
 export function dedupeKey(u: Pick<ShipmentUpdate, "carrier" | "trackingNumber" | "orderRef">): string | null {
   if (u.trackingNumber) return `tn:${u.trackingNumber}`;
-  if (u.orderRef) return `order:${u.carrier}:${u.orderRef}`;
+  if (u.orderRef) return `order:${u.orderRef}`;
   return null;
 }
 
@@ -39,6 +40,9 @@ function nextStatus(current: ShipmentStatus, incoming: ShipmentStatus | null, ne
 
 function nextCarrier(existing: StoredShipment, u: ShipmentUpdate, trackingNumber: string | null): CarrierId {
   if (existing.carrier === "unknown") return u.carrier;
+  // An order row (no tracking number yet, e.g. an Amazon order confirmation) that now gets
+  // its tracking number: the carrier that owns the number wins.
+  if (existing.trackingNumber === null && u.trackingNumber !== null && u.carrier !== "unknown") return u.carrier;
   // Amazon hands many orders to USPS/UPS/...: the carrier that owns the tracking number wins.
   if (
     existing.carrier === "amazon" &&
@@ -68,9 +72,13 @@ function pick(current: string | null, incoming: string | null, newer: boolean): 
  * - deliveredAt is set when the status becomes delivered (kept while it stays
  *   delivered) and cleared when it stops being delivered.
  * - expected date/window: newer non-null values win; otherwise fill blanks.
- * - tracking number, order ref, shipper, description: fill blanks only.
- * - carrier: replaces "unknown", and replaces "amazon" with the specific
- *   carrier that owns the same tracking number.
+ * - tracking number, order ref, shipper: fill blanks only. (Item
+ *   descriptions are never stored: they can reveal sensitive purchases.)
+ * - carrier: replaces "unknown"; on a row without a tracking number, the
+ *   carrier of the update that brings one wins (an Amazon order row joined
+ *   by a FedEx email whose reference is the order number becomes FedEx);
+ *   and "amazon" gives way to the specific carrier that owns the same
+ *   tracking number.
  * - user flags (hidden, userMarkedDelivered) are never touched.
  */
 export function mergeShipment(existing: StoredShipment | null, u: ShipmentUpdate, id: string): StoredShipment {
@@ -82,7 +90,6 @@ export function mergeShipment(existing: StoredShipment | null, u: ShipmentUpdate
       trackingNumber: u.trackingNumber,
       orderRef: u.orderRef,
       shipper: u.shipper,
-      description: u.description,
       status,
       expectedDelivery: u.expectedDelivery,
       expectedWindow: u.expectedWindow,
@@ -112,7 +119,6 @@ export function mergeShipment(existing: StoredShipment | null, u: ShipmentUpdate
     trackingNumber,
     orderRef: existing.orderRef ?? u.orderRef,
     shipper: existing.shipper ?? u.shipper,
-    description: existing.description ?? u.description,
     status,
     expectedDelivery: pick(existing.expectedDelivery, u.expectedDelivery, newer),
     expectedWindow: pick(existing.expectedWindow, u.expectedWindow, newer),

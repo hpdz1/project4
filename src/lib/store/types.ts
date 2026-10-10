@@ -59,6 +59,24 @@ export interface EmailLogEntry {
   note: string | null;
 }
 
+/** Everything a Store holds about one account (see `Store.exportAccount`). */
+export interface AccountSnapshot {
+  account: AccountRecord;
+  /** Newest activity first, like listShipments. */
+  shipments: StoredShipment[];
+  /** Newest first, like listEmailLog (at most EMAIL_LOG_LIMIT rows). */
+  emailLog: EmailLogEntry[];
+  /** Newest first (at most VERIFICATION_LIMIT). */
+  verifications: ForwardingVerification[];
+}
+
+/** Rows deleted by `Store.purgeExpired`, per kind. */
+export interface PurgeResult {
+  shipments: number;
+  emailLog: number;
+  verifications: number;
+}
+
 export interface EmailStats {
   /** Every email ever recorded for the account (any kind). Not capped by the log size. */
   count: number;
@@ -99,6 +117,8 @@ export interface Store {
   applyUpdates(accountId: string, updates: ShipmentUpdate[], newId: () => string): Promise<StoredShipment[]>;
   /** Newest activity first (lastEventAt, then firstSeenAt, then id). */
   listShipments(accountId: string): Promise<StoredShipment[]>;
+  /** Deletes one shipment permanently. false if it does not exist or belongs to another account. */
+  deleteShipment(accountId: string, shipmentId: string): Promise<boolean>;
   /** null if the shipment does not exist or belongs to another account. */
   setShipmentFlags(
     accountId: string,
@@ -117,5 +137,26 @@ export interface Store {
   addVerification(accountId: string, v: ForwardingVerification): Promise<void>;
   /** Verifications with receivedAt >= sinceIso, newest first. Throws RangeError for an invalid sinceIso. */
   listVerifications(accountId: string, sinceIso: string): Promise<ForwardingVerification[]>;
+  /**
+   * Everything stored for the account (data portability), read as one
+   * consistent snapshot. null when the account does not exist. The record
+   * includes the key hash: map it with `toAccountView` before sending it out.
+   */
+  exportAccount(accountId: string): Promise<AccountSnapshot | null>;
+  /**
+   * Deletes expired rows across all accounts, in one transaction (see
+   * docs/ARCHITECTURE.md "Retention"; the windows are in limits.ts). A row is
+   * expired when its time is MORE than the window before `now`:
+   * - shipments that are delivered (status "delivered" or marked by the
+   *   user) whose deliveredAt, or lastEventAt when that is unset, is older
+   *   than DELIVERED_RETENTION_MS;
+   * - any shipment whose lastEventAt is older than STALE_SHIPMENT_RETENTION_MS;
+   * - email log rows older than EMAIL_LOG_RETENTION_MS (the per-account
+   *   EMAIL_LOG_LIMIT cap still applies on insert);
+   * - forwarding verifications older than VERIFICATION_RETENTION_MS.
+   * Unparseable stored times count as the oldest possible time. Email counts
+   * and feed "last seen" times are kept. Throws RangeError for an invalid `now`.
+   */
+  purgeExpired(now: string): Promise<PurgeResult>;
   close?(): void;
 }

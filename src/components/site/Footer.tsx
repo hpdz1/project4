@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { SITE_NAME, SITE_TAGLINE } from "@/lib/site";
+import { OPERATOR, SITE_NAME, SITE_TAGLINE } from "@/lib/site";
 import { Container } from "@/components/ui/Container";
 import { LogoMark } from "./Logo";
 
@@ -11,8 +11,11 @@ const FOOTER_LINKS = [
   { href: "/contact", label: "Contact" },
 ] as const;
 
-export const CARRIER_DISCLAIMER =
-  "Package Radar is independent and not affiliated with USPS, UPS, FedEx, Amazon, DHL or any carrier. Carrier names are trademarks of their owners.";
+/** The disclaimer after the brand name (rendered with the name marked translate="no"). */
+const DISCLAIMER_REST =
+  "is independent and not affiliated with, endorsed by or sponsored by any postal service, carrier or retailer. Carrier, postal service and program names are trademarks of their owners and are used only to describe which emails the service understands.";
+
+export const CARRIER_DISCLAIMER = `${SITE_NAME} ${DISCLAIMER_REST}`;
 
 /** Site footer: secondary links, the carrier disclaimer and copyright. */
 export function Footer() {
@@ -27,9 +30,12 @@ export function Footer() {
               className="inline-flex items-center gap-2 rounded-lg font-semibold text-text"
             >
               <LogoMark className="size-6" />
-              {SITE_NAME}
+              <span translate="no">{SITE_NAME}</span>
             </Link>
-            <p>{SITE_TAGLINE} — using the alerts your carriers already send you.</p>
+            <p>
+              {SITE_TAGLINE} — using the alerts your carriers and postal
+              service already send you.
+            </p>
           </div>
           <nav aria-label="Footer">
             <ul className="-mx-2.5 flex flex-wrap gap-x-1 gap-y-1">
@@ -46,9 +52,17 @@ export function Footer() {
             </ul>
           </nav>
         </div>
-        <p className="max-w-3xl leading-relaxed">{CARRIER_DISCLAIMER}</p>
+        <p className="max-w-3xl leading-relaxed">
+          <span translate="no">{SITE_NAME}</span> {DISCLAIMER_REST}
+        </p>
         <p>
-          © {year} {SITE_NAME}
+          © {year} <span translate="no">{SITE_NAME}</span>
+          {OPERATOR.nameIsSet ? (
+            <>
+              {" "}
+              · Run by <span translate="no">{OPERATOR.name}</span>
+            </>
+          ) : null}
         </p>
       </Container>
     </footer>

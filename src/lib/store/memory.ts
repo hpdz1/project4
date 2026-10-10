@@ -4,8 +4,18 @@ import { DuplicateAccountError } from "./errors";
 import { isSourceKind, patchPrograms } from "./guards";
 import { EMAIL_LOG_LIMIT, VERIFICATION_LIMIT } from "./limits";
 import { compareShipmentsNewestFirst } from "./merge";
+import { isShipmentExpired, retentionCutoffs } from "./retention";
 import { isoToMs, isoToSortMs, maxIso } from "./time";
-import type { AccountPatch, AccountRecord, CreateAccountInput, EmailLogEntry, EmailStats, Store } from "./types";
+import type {
+  AccountPatch,
+  AccountRecord,
+  AccountSnapshot,
+  CreateAccountInput,
+  EmailLogEntry,
+  EmailStats,
+  PurgeResult,
+  Store,
+} from "./types";
 
 interface ShipmentRow {
   key: string;
@@ -144,6 +154,10 @@ export class MemoryStore implements Store {
     return [...data.shipments.values()].map((row) => ({ ...row.shipment })).sort(compareShipmentsNewestFirst);
   }
 
+  async deleteShipment(accountId: string, shipmentId: string): Promise<boolean> {
+    return this.accounts.get(accountId)?.shipments.delete(shipmentId) ?? false;
+  }
+
   async setShipmentFlags(
     accountId: string,
     shipmentId: string,
@@ -200,6 +214,36 @@ export class MemoryStore implements Store {
     if (Number.isNaN(since)) throw new RangeError(`Invalid sinceIso: ${sinceIso}`);
     const list = this.accounts.get(accountId)?.verifications ?? [];
     return list.filter((row) => row.ms >= since).map((row) => ({ ...row.value }));
+  }
+
+  async exportAccount(accountId: string): Promise<AccountSnapshot | null> {
+    const data = this.accounts.get(accountId);
+    if (!data) return null;
+    return {
+      account: copyAccount(data.record),
+      shipments: [...data.shipments.values()].map((row) => ({ ...row.shipment })).sort(compareShipmentsNewestFirst),
+      emailLog: data.log.map((row) => ({ ...row.value })),
+      verifications: data.verifications.map((row) => ({ ...row.value })),
+    };
+  }
+
+  async purgeExpired(now: string): Promise<PurgeResult> {
+    const cutoffs = retentionCutoffs(now);
+    const result: PurgeResult = { shipments: 0, emailLog: 0, verifications: 0 };
+    for (const data of this.accounts.values()) {
+      for (const [id, row] of data.shipments) {
+        if (!isShipmentExpired(row.shipment, cutoffs)) continue;
+        data.shipments.delete(id);
+        result.shipments += 1;
+      }
+      const log = data.log.filter((row) => row.ms >= cutoffs.emailLogMs);
+      result.emailLog += data.log.length - log.length;
+      data.log = log;
+      const verifications = data.verifications.filter((row) => row.ms >= cutoffs.verificationMs);
+      result.verifications += data.verifications.length - verifications.length;
+      data.verifications = verifications;
+    }
+    return result;
   }
 
   close(): void {

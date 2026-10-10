@@ -12,17 +12,27 @@ import { DuplicateAccountError } from "./errors";
 import {
   isCarrierId,
   isEmailKind,
-  isProgramState,
   isShipmentStatus,
   isSourceKind,
   isVerificationProvider,
   patchPrograms,
+  sanitizePrograms,
 } from "./guards";
 import { EMAIL_LOG_LIMIT, VERIFICATION_LIMIT } from "./limits";
 import { compareShipmentsNewestFirst } from "./merge";
+import { retentionCutoffs } from "./retention";
 import { MIGRATIONS, SCHEMA_VERSION_TABLE } from "./sqlite-schema";
 import { isoToMs, isoToSortMs, maxIso } from "./time";
-import type { AccountPatch, AccountRecord, CreateAccountInput, EmailLogEntry, EmailStats, Store } from "./types";
+import type {
+  AccountPatch,
+  AccountRecord,
+  AccountSnapshot,
+  CreateAccountInput,
+  EmailLogEntry,
+  EmailStats,
+  PurgeResult,
+  Store,
+} from "./types";
 
 // ---------------------------------------------------------------------------
 // The slice of node:sqlite we use. Typed locally because the project's
@@ -79,6 +89,7 @@ function int(row: Row, column: string): number {
   throw new TypeError(`Expected INTEGER in column ${column}`);
 }
 
+/** Only well-formed entries survive (see `sanitizePrograms`); anything else reads as an empty checklist. */
 function decodePrograms(json: string): Partial<Record<ProgramId, ProgramState>> {
   let parsed: unknown;
   try {
@@ -86,12 +97,7 @@ function decodePrograms(json: string): Partial<Record<ProgramId, ProgramState>> 
   } catch {
     return {};
   }
-  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return {};
-  const programs: Partial<Record<ProgramId, ProgramState>> = {};
-  for (const [id, state] of Object.entries(parsed)) {
-    if (isProgramState(state)) programs[id as ProgramId] = state;
-  }
-  return programs;
+  return sanitizePrograms(parsed);
 }
 
 function decodeAccount(row: Row): AccountRecord {
@@ -119,7 +125,6 @@ function decodeShipment(row: Row): StoredShipment {
     trackingNumber: textOrNull(row, "tracking_number"),
     orderRef: textOrNull(row, "order_ref"),
     shipper: textOrNull(row, "shipper"),
-    description: textOrNull(row, "description"),
     status: isShipmentStatus(status) ? status : "unknown",
     expectedDelivery: textOrNull(row, "expected_delivery"),
     expectedWindow: textOrNull(row, "expected_window"),
@@ -164,17 +169,35 @@ function duplicateField(error: unknown): DuplicateAccountError["field"] | null {
   return null;
 }
 
-const SHIPMENT_COLUMNS = `carrier, tracking_number, order_ref, shipper, description, status, expected_delivery,
-  expected_window, delivered_at, first_seen_at, last_event_at, source, hidden, user_marked_delivered`;
+/** Every column a shipment write sets (besides id, account_id and dedupe_key), in `shipmentValues` order. */
+const SHIPMENT_COLUMN_LIST = [
+  "carrier",
+  "tracking_number",
+  "order_ref",
+  "shipper",
+  "status",
+  "expected_delivery",
+  "expected_window",
+  "delivered_at",
+  "first_seen_at",
+  "last_event_at",
+  "source",
+  "hidden",
+  "user_marked_delivered",
+  "last_event_ms",
+  "delivered_ms",
+] as const;
 
-/** Values for SHIPMENT_COLUMNS, in order. */
+const SHIPMENT_COLUMNS = SHIPMENT_COLUMN_LIST.join(", ");
+const SHIPMENT_PLACEHOLDERS = SHIPMENT_COLUMN_LIST.map(() => "?").join(", ");
+
+/** Values for SHIPMENT_COLUMN_LIST, in order. */
 function shipmentValues(s: StoredShipment): SqlValue[] {
   return [
     s.carrier,
     s.trackingNumber,
     s.orderRef,
     s.shipper,
-    s.description,
     s.status,
     s.expectedDelivery,
     s.expectedWindow,
@@ -184,8 +207,24 @@ function shipmentValues(s: StoredShipment): SqlValue[] {
     s.source,
     s.hidden ? 1 : 0,
     s.userMarkedDelivered ? 1 : 0,
+    isoToSortMs(s.lastEventAt),
+    s.deliveredAt === null ? null : isoToSortMs(s.deliveredAt),
   ];
 }
+
+/**
+ * The retention deletes behind purgeExpired, each taking one cutoff in epoch
+ * ms and each backed by an index from schema v2. The delivered query repeats
+ * the shipments_delivered partial index's WHERE clause verbatim, which is
+ * what lets SQLite use that index. Exported so tests can check the plans.
+ */
+export const RETENTION_SQL = {
+  staleShipments: "DELETE FROM shipments WHERE last_event_ms < ?",
+  deliveredShipments: `DELETE FROM shipments WHERE (status = 'delivered' OR user_marked_delivered = 1)
+    AND coalesce(delivered_ms, last_event_ms) < ?`,
+  emailLog: "DELETE FROM email_log WHERE received_ms < ?",
+  verifications: "DELETE FROM verifications WHERE received_ms < ?",
+} as const;
 
 function prepareStatements(db: Database) {
   const p = (sql: string) => db.prepare(sql);
@@ -210,12 +249,13 @@ function prepareStatements(db: Database) {
     shipmentsByAccount: p("SELECT * FROM shipments WHERE account_id = ?"),
     insertShipment: p(
       `INSERT INTO shipments (id, account_id, dedupe_key, ${SHIPMENT_COLUMNS})
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ${SHIPMENT_PLACEHOLDERS})`,
     ),
     updateShipment: p(
-      `UPDATE shipments SET dedupe_key = ?, (${SHIPMENT_COLUMNS}) = (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `UPDATE shipments SET dedupe_key = ?, (${SHIPMENT_COLUMNS}) = (${SHIPMENT_PLACEHOLDERS})
        WHERE account_id = ? AND id = ?`,
     ),
+    deleteShipment: p("DELETE FROM shipments WHERE account_id = ? AND id = ?"),
     setShipmentFlags: p(
       `UPDATE shipments SET hidden = coalesce(?, hidden), user_marked_delivered = coalesce(?, user_marked_delivered)
        WHERE account_id = ? AND id = ?`,
@@ -230,6 +270,7 @@ function prepareStatements(db: Database) {
          SELECT seq FROM email_log WHERE account_id = ? ORDER BY received_ms DESC, seq DESC LIMIT ?)`,
     ),
     listLog: p("SELECT * FROM email_log WHERE account_id = ? ORDER BY received_ms DESC, seq DESC LIMIT ?"),
+    allLog: p("SELECT * FROM email_log WHERE account_id = ? ORDER BY received_ms DESC, seq DESC"),
     emailStats: p("SELECT email_count, last_email_at FROM accounts WHERE id = ?"),
     setEmailStats: p("UPDATE accounts SET email_count = ?, last_email_at = ? WHERE id = ?"),
     feed: p("SELECT last_seen_at FROM email_feeds WHERE account_id = ? AND source = ?"),
@@ -250,12 +291,22 @@ function prepareStatements(db: Database) {
     listVerifications: p(
       `SELECT * FROM verifications WHERE account_id = ? AND received_ms >= ? ORDER BY received_ms DESC, seq DESC`,
     ),
+    allVerifications: p("SELECT * FROM verifications WHERE account_id = ? ORDER BY received_ms DESC, seq DESC"),
+
+    purgeStaleShipments: p(RETENTION_SQL.staleShipments),
+    purgeDeliveredShipments: p(RETENTION_SQL.deliveredShipments),
+    purgeLog: p(RETENTION_SQL.emailLog),
+    purgeVerifications: p(RETENTION_SQL.verifications),
   };
 }
 
-/** Runs `fn` in an IMMEDIATE transaction (takes the write lock up front), rolling back on error. */
-function transaction<T>(db: Database, fn: () => T): T {
-  db.exec("BEGIN IMMEDIATE");
+/**
+ * Runs `fn` in a transaction, rolling back on error. IMMEDIATE (the default)
+ * takes the write lock up front; DEFERRED suits read-only work that wants one
+ * consistent snapshot.
+ */
+function transaction<T>(db: Database, fn: () => T, mode: "IMMEDIATE" | "DEFERRED" = "IMMEDIATE"): T {
+  db.exec(`BEGIN ${mode}`);
   try {
     const result = fn();
     db.exec("COMMIT");
@@ -284,7 +335,9 @@ function migrate(db: Database): void {
   for (let version = readVersion(); version < target; version = readVersion()) {
     transaction(db, () => {
       if (readVersion() !== version) return; // another process migrated meanwhile
-      db.exec(MIGRATIONS[version]);
+      const migration = MIGRATIONS[version];
+      if (typeof migration === "string") db.exec(migration);
+      else migration(db);
       db.prepare(
         `INSERT INTO schema_version (id, version) VALUES (1, ?)
          ON CONFLICT (id) DO UPDATE SET version = excluded.version`,
@@ -308,8 +361,11 @@ export class SqliteStore implements Store {
     if (path !== ":memory:" && !path.startsWith("file:")) mkdirSync(dirname(resolve(path)), { recursive: true });
     this.db = openDatabase(path);
     try {
+      // secure_delete overwrites deleted content with zeros, so purged or deleted rows (and the
+      // description column dropped by schema v2) don't linger in free space of the file.
       this.db.exec(
-        "PRAGMA busy_timeout = 5000; PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA foreign_keys = ON;",
+        "PRAGMA busy_timeout = 5000; PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA foreign_keys = ON; " +
+          "PRAGMA secure_delete = ON;",
       );
       migrate(this.db);
       this.sql = prepareStatements(this.db);
@@ -412,6 +468,10 @@ export class SqliteStore implements Store {
     return this.sql.shipmentsByAccount.all(accountId).map(decodeShipment).sort(compareShipmentsNewestFirst);
   }
 
+  async deleteShipment(accountId: string, shipmentId: string): Promise<boolean> {
+    return Number(this.sql.deleteShipment.run(accountId, shipmentId).changes) > 0;
+  }
+
   async setShipmentFlags(
     accountId: string,
     shipmentId: string,
@@ -488,6 +548,37 @@ export class SqliteStore implements Store {
     const since = isoToMs(sinceIso);
     if (Number.isNaN(since)) throw new RangeError(`Invalid sinceIso: ${sinceIso}`);
     return this.sql.listVerifications.all(accountId, since).map(decodeVerification);
+  }
+
+  async exportAccount(accountId: string): Promise<AccountSnapshot | null> {
+    return transaction(
+      this.db,
+      () => {
+        const row = this.sql.accountById.get(accountId);
+        if (!row) return null;
+        return {
+          account: decodeAccount(row),
+          shipments: this.sql.shipmentsByAccount.all(accountId).map(decodeShipment).sort(compareShipmentsNewestFirst),
+          emailLog: this.sql.allLog.all(accountId).map(decodeLogEntry),
+          verifications: this.sql.allVerifications.all(accountId).map(decodeVerification),
+        };
+      },
+      "DEFERRED",
+    );
+  }
+
+  async purgeExpired(now: string): Promise<PurgeResult> {
+    const cutoffs = retentionCutoffs(now);
+    return transaction(this.db, () => {
+      const deleted = (statement: Statement, cutoff: number) => Number(statement.run(cutoff).changes);
+      return {
+        shipments:
+          deleted(this.sql.purgeStaleShipments, cutoffs.staleMs) +
+          deleted(this.sql.purgeDeliveredShipments, cutoffs.deliveredMs),
+        emailLog: deleted(this.sql.purgeLog, cutoffs.emailLogMs),
+        verifications: deleted(this.sql.purgeVerifications, cutoffs.verificationMs),
+      };
+    });
   }
 
   /** Closes the database. The store cannot be used afterwards. */

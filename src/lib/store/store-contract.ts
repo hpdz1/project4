@@ -5,7 +5,14 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { ForwardingVerification, ShipmentUpdate } from "@/lib/types";
 import { DuplicateAccountError } from "./errors";
-import { EMAIL_LOG_LIMIT, VERIFICATION_LIMIT } from "./limits";
+import {
+  DELIVERED_RETENTION_MS,
+  EMAIL_LOG_LIMIT,
+  EMAIL_LOG_RETENTION_MS,
+  STALE_SHIPMENT_RETENTION_MS,
+  VERIFICATION_LIMIT,
+  VERIFICATION_RETENTION_MS,
+} from "./limits";
 import type { CreateAccountInput, EmailLogEntry, Store } from "./types";
 
 const NOW = "2026-10-08T12:00:00.000Z";
@@ -33,7 +40,6 @@ export function shipmentUpdate(overrides: Partial<ShipmentUpdate> = {}): Shipmen
     trackingNumber: "1Z999AA10123456784",
     orderRef: null,
     shipper: null,
-    description: null,
     status: "in_transit",
     expectedDelivery: null,
     expectedWindow: null,
@@ -259,7 +265,6 @@ export function describeStoreContract(name: string, create: () => Store): void {
           carrier: "amazon",
           trackingNumber: null,
           orderRef: "113-1234567-1234567",
-          description: "Trail running shoes",
           status: "pre_transit",
           eventAt: T1,
           source: "amazon",
@@ -280,7 +285,6 @@ export function describeStoreContract(name: string, create: () => Store): void {
           carrier: "ups",
           trackingNumber: "1Z999AA10123456784",
           orderRef: "113-1234567-1234567",
-          description: "Trail running shoes",
           status: "in_transit",
           firstSeenAt: T1,
         });
@@ -309,6 +313,109 @@ export function describeStoreContract(name: string, create: () => Store): void {
         const shipped = shipmentUpdate({ carrier: "usps", trackingNumber: "9400111899223197428490", orderRef: "113-7", eventAt: T2 });
         const [merged] = await store.applyUpdates("acc_1", [shipped], idSequence("b"));
         expect(merged).toMatchObject({ id: created.id, carrier: "usps", trackingNumber: "9400111899223197428490" });
+      });
+
+      it("joins a FedEx email whose reference is the Amazon order number to the Amazon order row", async () => {
+        const orderRef = "113-1234567-1234567";
+        const [order] = await store.applyUpdates(
+          "acc_1",
+          [
+            shipmentUpdate({
+              carrier: "amazon",
+              trackingNumber: null,
+              orderRef,
+              shipper: "Amazon.com",
+              status: "pre_transit",
+              expectedDelivery: "2026-10-09",
+              eventAt: T1,
+              source: "amazon",
+            }),
+          ],
+          idSequence("a"),
+        );
+
+        const fedex = shipmentUpdate({
+          carrier: "fedex",
+          trackingNumber: "794612345678",
+          orderRef,
+          shipper: null,
+          status: "in_transit",
+          eventAt: T2,
+          source: "fedex",
+        });
+        const [joined] = await store.applyUpdates("acc_1", [fedex], idSequence("b"));
+        expect(joined).toMatchObject({
+          id: order.id,
+          carrier: "fedex",
+          trackingNumber: "794612345678",
+          orderRef,
+          shipper: "Amazon.com",
+          status: "in_transit",
+          expectedDelivery: "2026-10-09",
+          firstSeenAt: T1,
+          lastEventAt: T2,
+          source: "fedex",
+        });
+
+        // Re-keyed to the tracking number: FedEx's next email (no reference) lands on the same row...
+        const [next] = await store.applyUpdates(
+          "acc_1",
+          [{ ...fedex, orderRef: null, status: "out_for_delivery", eventAt: T3 }],
+          idSequence("c"),
+        );
+        expect(next).toMatchObject({ id: order.id, carrier: "fedex", status: "out_for_delivery" });
+        // ...and so does Amazon's own order-only email, which no longer changes the carrier.
+        const [fromAmazon] = await store.applyUpdates(
+          "acc_1",
+          [shipmentUpdate({ carrier: "amazon", trackingNumber: null, orderRef, status: "delivered", eventAt: NOW, source: "amazon" })],
+          idSequence("d"),
+        );
+        expect(fromAmazon).toMatchObject({ id: order.id, carrier: "fedex", trackingNumber: "794612345678", status: "delivered" });
+        expect(await store.listShipments("acc_1")).toHaveLength(1);
+      });
+
+      it("joins the Amazon order row when the carrier email comes first", async () => {
+        const orderRef = "113-7654321-7654321";
+        const [fromUps] = await store.applyUpdates(
+          "acc_1",
+          [shipmentUpdate({ orderRef, status: "in_transit", eventAt: T2 })],
+          idSequence("a"),
+        );
+        const [fromAmazon] = await store.applyUpdates(
+          "acc_1",
+          [shipmentUpdate({ carrier: "amazon", trackingNumber: null, orderRef, status: "pre_transit", eventAt: T1, source: "amazon" })],
+          idSequence("b"),
+        );
+        expect(fromAmazon).toMatchObject({ id: fromUps.id, carrier: "ups", status: "in_transit", firstSeenAt: T1 });
+        expect(await store.listShipments("acc_1")).toHaveLength(1);
+      });
+
+      it("keys order rows by order ref alone, so another sender's order-only email finds the row", async () => {
+        const orderRef = "113-5555555-5555555";
+        const base = { trackingNumber: null, orderRef, status: "pre_transit" as const };
+        // A split order: two packages already have rows of their own, so an order-only email
+        // can't pick one and gets an order row.
+        await store.applyUpdates(
+          "acc_1",
+          [
+            shipmentUpdate({ carrier: "ups", trackingNumber: "1Z999AA10123456784", orderRef, eventAt: T1 }),
+            shipmentUpdate({ carrier: "amazon", trackingNumber: "TBA111", orderRef, eventAt: T1, source: "amazon" }),
+          ],
+          idSequence("a"),
+        );
+        const [order] = await store.applyUpdates(
+          "acc_1",
+          [shipmentUpdate({ ...base, carrier: "amazon", eventAt: T1, source: "amazon" })],
+          idSequence("b"),
+        );
+        expect(order.id).toBe("b_1");
+        const [again] = await store.applyUpdates(
+          "acc_1",
+          [shipmentUpdate({ ...base, carrier: "unknown", status: "in_transit", eventAt: T2, source: "generic" })],
+          idSequence("c"),
+        );
+        expect(again).toMatchObject({ id: "b_1", carrier: "amazon", status: "in_transit" });
+        expect(await store.listShipments("acc_1")).toHaveLength(3);
       });
 
       it("keeps split shipments of one order apart", async () => {
@@ -415,6 +522,31 @@ export function describeStoreContract(name: string, create: () => Store): void {
         expect(await store.setShipmentFlags("acc_2", s.id, { hidden: true })).toBeNull();
         expect(await store.setShipmentFlags("acc_1", "nope", { hidden: true })).toBeNull();
         expect((await store.listShipments("acc_1"))[0].hidden).toBe(false);
+      });
+
+      it("deletes a shipment permanently", async () => {
+        const [a, b] = await store.applyUpdates(
+          "acc_1",
+          [shipmentUpdate({ trackingNumber: "A" }), shipmentUpdate({ trackingNumber: "B" })],
+          idSequence("a"),
+        );
+        expect(await store.deleteShipment("acc_1", a.id)).toBe(true);
+        expect((await store.listShipments("acc_1")).map((s) => s.id)).toEqual([b.id]);
+        expect(await store.deleteShipment("acc_1", a.id)).toBe(false);
+        expect(await store.setShipmentFlags("acc_1", a.id, { hidden: true })).toBeNull();
+
+        // A later email about the same package starts a fresh row.
+        const [fresh] = await store.applyUpdates("acc_1", [shipmentUpdate({ trackingNumber: "A", eventAt: T3 })], idSequence("b"));
+        expect(fresh).toMatchObject({ id: "b_1", firstSeenAt: T3, hidden: false });
+      });
+
+      it("refuses to delete a shipment of another account or an unknown one", async () => {
+        await store.createAccount(accountInput({ id: "acc_2", alias: "r-other", keyHash: "hash-2" }));
+        const [s] = await store.applyUpdates("acc_1", [shipmentUpdate()], idSequence());
+        expect(await store.deleteShipment("acc_2", s.id)).toBe(false);
+        expect(await store.deleteShipment("acc_1", "nope")).toBe(false);
+        expect(await store.deleteShipment("nope", s.id)).toBe(false);
+        expect(await store.listShipments("acc_1")).toHaveLength(1);
       });
 
       it("returns copies", async () => {
@@ -529,6 +661,158 @@ export function describeStoreContract(name: string, create: () => Store): void {
       it("ignores verifications for an unknown account", async () => {
         await store.addVerification("nope", verification());
         expect(await store.listVerifications("nope", T1)).toEqual([]);
+      });
+    });
+
+    describe("exportAccount", () => {
+      it("returns everything stored for the account, as copies", async () => {
+        const created = await store.createAccount(accountInput());
+        await store.createAccount(accountInput({ id: "acc_2", alias: "r-other", keyHash: "hash-2" }));
+        await store.updateAccount("acc_1", { programs: { usps_informed_delivery: "done" } }, NOW);
+        await store.applyUpdates(
+          "acc_1",
+          [shipmentUpdate({ trackingNumber: "A", eventAt: T1 }), shipmentUpdate({ trackingNumber: "B", eventAt: T3 })],
+          idSequence("a"),
+        );
+        await store.applyUpdates("acc_2", [shipmentUpdate({ trackingNumber: "C" })], idSequence("b"));
+        const older = logEntry({ receivedAt: T1, note: "older" });
+        const newer = logEntry({ receivedAt: T3, kind: "ignored", senderDomain: null, updates: 0 });
+        for (const e of [older, newer]) await store.recordEmail("acc_1", e);
+        await store.recordEmail("acc_2", logEntry());
+        const v1 = verification({ receivedAt: T1, code: "111" });
+        const v2 = verification({ receivedAt: T3, code: "333" });
+        for (const v of [v2, v1]) await store.addVerification("acc_1", v);
+
+        const exported = await store.exportAccount("acc_1");
+        expect(exported).toEqual({
+          account: { ...created, programs: { usps_informed_delivery: "done" } },
+          shipments: await store.listShipments("acc_1"),
+          emailLog: [newer, older],
+          verifications: [v2, v1],
+        });
+        expect(exported?.shipments.map((s) => s.trackingNumber)).toEqual(["B", "A"]);
+
+        exported!.account.programs.ups_my_choice = "done";
+        exported!.shipments[0].hidden = true;
+        exported!.emailLog[0].note = "changed";
+        exported!.verifications[0].code = "changed";
+        const again = await store.exportAccount("acc_1");
+        expect(again?.account.programs).toEqual({ usps_informed_delivery: "done" });
+        expect(again?.shipments[0].hidden).toBe(false);
+        expect(again?.emailLog[0].note).toBeNull();
+        expect(again?.verifications[0].code).toBe("333");
+      });
+
+      it("exports an empty account", async () => {
+        const created = await store.createAccount(accountInput());
+        expect(await store.exportAccount("acc_1")).toEqual({ account: created, shipments: [], emailLog: [], verifications: [] });
+      });
+
+      it("returns null for an unknown or deleted account", async () => {
+        expect(await store.exportAccount("nope")).toBeNull();
+        await store.createAccount(accountInput());
+        await store.deleteAccount("acc_1");
+        expect(await store.exportAccount("acc_1")).toBeNull();
+      });
+    });
+
+    describe("purgeExpired", () => {
+      const PURGE_NOW = "2026-12-31T12:00:00.000Z";
+      const nowMs = Date.parse(PURGE_NOW);
+      const DAY = 24 * 60 * 60 * 1000;
+      const ago = (ms: number) => new Date(nowMs - ms).toISOString();
+
+      beforeEach(async () => {
+        await store.createAccount(accountInput());
+        await store.createAccount(accountInput({ id: "acc_2", alias: "r-other", keyHash: "hash-2" }));
+      });
+
+      const trackingNumbers = async (accountId: string) =>
+        (await store.listShipments(accountId)).map((s) => s.trackingNumber).sort();
+
+      it("uses the retention windows from the architecture doc", () => {
+        expect(DELIVERED_RETENTION_MS).toBe(30 * DAY);
+        expect(STALE_SHIPMENT_RETENTION_MS).toBe(60 * DAY);
+        expect(EMAIL_LOG_RETENTION_MS).toBe(90 * DAY);
+        expect(VERIFICATION_RETENTION_MS).toBe(48 * 60 * 60 * 1000);
+      });
+
+      it("deletes delivered shipments 30 days after delivery and any shipment after 60 quiet days, in every account", async () => {
+        const at = (days: number) => ago(days * DAY);
+        await store.applyUpdates(
+          "acc_1",
+          [
+            shipmentUpdate({ trackingNumber: "QUIET_59", status: "in_transit", eventAt: at(59) }),
+            shipmentUpdate({ trackingNumber: "QUIET_61", status: "in_transit", eventAt: at(61) }),
+            shipmentUpdate({ trackingNumber: "HIDDEN_45", status: "exception", eventAt: at(45) }),
+            shipmentUpdate({ trackingNumber: "DELIVERED_29", status: "delivered", eventAt: at(29) }),
+            shipmentUpdate({ trackingNumber: "DELIVERED_30", status: "delivered", eventAt: at(30) }),
+            shipmentUpdate({ trackingNumber: "DELIVERED_31", status: "delivered", eventAt: at(31) }),
+            // Delivered 31 days ago; a later email (29 days ago) repeated it. Delivery time counts.
+            shipmentUpdate({ trackingNumber: "REPEATED", status: "delivered", deliveredAt: at(31), eventAt: at(31) }),
+            shipmentUpdate({ trackingNumber: "REPEATED", status: "delivered", eventAt: at(29) }),
+            // Same instant as 31 days ago, written with an offset: compared as an instant.
+            shipmentUpdate({
+              trackingNumber: "OFFSET",
+              status: "delivered",
+              eventAt: new Date(nowMs - 31 * DAY).toISOString().replace("Z", "+00:00"),
+            }),
+            shipmentUpdate({ trackingNumber: "MARKED_31", status: "in_transit", eventAt: at(31) }),
+            shipmentUpdate({ trackingNumber: "MARKED_29", status: "in_transit", eventAt: at(29) }),
+          ],
+          idSequence("a"),
+        );
+        await store.applyUpdates(
+          "acc_2",
+          [
+            shipmentUpdate({ trackingNumber: "OTHER_OLD", status: "delivered", eventAt: at(40) }),
+            shipmentUpdate({ trackingNumber: "OTHER_NEW", status: "pre_transit", eventAt: at(1) }),
+          ],
+          idSequence("b"),
+        );
+        const byTn = new Map((await store.listShipments("acc_1")).map((s) => [s.trackingNumber, s.id]));
+        await store.setShipmentFlags("acc_1", byTn.get("MARKED_31")!, { userMarkedDelivered: true });
+        await store.setShipmentFlags("acc_1", byTn.get("MARKED_29")!, { userMarkedDelivered: true });
+        await store.setShipmentFlags("acc_1", byTn.get("HIDDEN_45")!, { hidden: true });
+
+        const result = await store.purgeExpired(PURGE_NOW);
+        expect(result).toEqual({ shipments: 6, emailLog: 0, verifications: 0 });
+        expect(await trackingNumbers("acc_1")).toEqual(["DELIVERED_29", "DELIVERED_30", "HIDDEN_45", "MARKED_29", "QUIET_59"]);
+        expect(await trackingNumbers("acc_2")).toEqual(["OTHER_NEW"]);
+
+        // Nothing left to purge.
+        expect(await store.purgeExpired(PURGE_NOW)).toEqual({ shipments: 0, emailLog: 0, verifications: 0 });
+      });
+
+      it("deletes email log rows older than 90 days but keeps the email count and feeds", async () => {
+        await store.recordEmail("acc_1", logEntry({ receivedAt: ago(91 * DAY), kind: "usps_digest", note: "91" }));
+        await store.recordEmail("acc_1", logEntry({ receivedAt: ago(90 * DAY), note: "90" }));
+        await store.recordEmail("acc_1", logEntry({ receivedAt: ago(89 * DAY), note: "89" }));
+        await store.recordEmail("acc_2", logEntry({ receivedAt: ago(100 * DAY), note: "100" }));
+        const statsBefore = await store.getEmailStats("acc_1");
+
+        expect(await store.purgeExpired(PURGE_NOW)).toEqual({ shipments: 0, emailLog: 2, verifications: 0 });
+        expect((await store.listEmailLog("acc_1")).map((e) => e.note)).toEqual(["89", "90"]);
+        expect(await store.listEmailLog("acc_2")).toEqual([]);
+        expect(await store.getEmailStats("acc_1")).toEqual(statsBefore);
+        expect((await store.getEmailStats("acc_2")).count).toBe(1);
+      });
+
+      it("deletes forwarding confirmations after 48 hours", async () => {
+        const HOUR = 60 * 60 * 1000;
+        await store.addVerification("acc_1", verification({ receivedAt: ago(49 * HOUR), code: "49" }));
+        await store.addVerification("acc_1", verification({ receivedAt: ago(48 * HOUR), code: "48" }));
+        await store.addVerification("acc_1", verification({ receivedAt: ago(1 * HOUR), code: "1" }));
+        await store.addVerification("acc_2", verification({ receivedAt: ago(72 * HOUR), code: "72" }));
+
+        expect(await store.purgeExpired(PURGE_NOW)).toEqual({ shipments: 0, emailLog: 0, verifications: 2 });
+        const all = "2000-01-01T00:00:00.000Z";
+        expect((await store.listVerifications("acc_1", all)).map((v) => v.code)).toEqual(["1", "48"]);
+        expect(await store.listVerifications("acc_2", all)).toEqual([]);
+      });
+
+      it("rejects an invalid now", async () => {
+        await expect(store.purgeExpired("soon")).rejects.toBeInstanceOf(RangeError);
       });
     });
   });

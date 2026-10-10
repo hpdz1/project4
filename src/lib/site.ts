@@ -12,15 +12,21 @@ export const SITE_NAME = "Package Radar";
 export const SITE_TAGLINE = "See what's on the way to your home";
 export const DEFAULT_TITLE = `${SITE_NAME} — see what's on the way to your home`;
 export const SITE_DESCRIPTION =
-  "One dashboard for the delivery alerts your carriers already send about your home. Turn on USPS Informed Delivery, UPS My Choice or FedEx Delivery Manager once, forward their emails, and see every package on the way in one place. No tracking numbers to type, no carrier passwords.";
+  "One dashboard for the delivery alerts your carriers and postal service already send you, wherever you live. Turn on their free alert programs once, forward their emails, and see every package on the way in one place. No tracking numbers to type, no carrier passwords.";
 
 /** Effective date of the privacy policy and terms (YYYY-MM-DD). */
-export const LEGAL_EFFECTIVE_DATE = "2026-10-08";
+export const LEGAL_EFFECTIVE_DATE = "2026-10-10";
 
 const DEFAULT_SITE_URL = "http://localhost:3000";
 const DEFAULT_CONTACT_EMAIL = "hello@example.com";
 const ADSENSE_CLIENT_RE = /^ca-pub-\d{10,20}$/;
 const AD_SLOT_RE = /^\d{4,20}$/;
+const EMAIL_RE = /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/;
+
+/** Used when NEXT_PUBLIC_OPERATOR_NAME is unset; reads naturally mid-sentence. */
+export const DEFAULT_OPERATOR_NAME = `the operator of ${SITE_NAME}`;
+/** Longest operator free-text value kept (names, addresses, representatives). */
+const MAX_OPERATOR_TEXT = 300;
 
 /**
  * Normalize a configured site URL: http(s) only, no trailing slash.
@@ -41,11 +47,99 @@ export function normalizeSiteUrl(raw: string | undefined): string {
 }
 
 /** A plausible email address, or the default contact address. */
-export function normalizeContactEmail(raw: string | undefined): string {
+export function normalizeContactEmail(
+  raw: string | undefined,
+  fallback: string = DEFAULT_CONTACT_EMAIL,
+): string {
   const value = raw?.trim();
-  return value && /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(value)
-    ? value
-    : DEFAULT_CONTACT_EMAIL;
+  return value && EMAIL_RE.test(value) ? value : fallback;
+}
+
+/**
+ * Optional free text from the environment (operator name, postal address,
+ * representative details): whitespace collapsed, at most 300 characters,
+ * null when unset or blank.
+ */
+export function parseOptionalText(raw: string | undefined): string | null {
+  const value = raw?.replace(/\s+/g, " ").trim();
+  if (!value) return null;
+  return value.length > MAX_OPERATOR_TEXT
+    ? value.slice(0, MAX_OPERATOR_TEXT).trimEnd()
+    : value;
+}
+
+/**
+ * The operator's country for the legal pages. A two-letter ISO 3166-1 code
+ * ("DE", "gb") becomes its English name ("Germany", "United Kingdom");
+ * anything else is kept as free text ("the State of Delaware, United States").
+ */
+export function parseOperatorCountry(raw: string | undefined): string | null {
+  const value = parseOptionalText(raw);
+  if (!value) return null;
+  if (/^[A-Za-z]{2}$/.test(value)) {
+    const code = value.toUpperCase();
+    try {
+      const name = new Intl.DisplayNames(["en"], { type: "region" }).of(code);
+      if (name && name !== code) return name;
+    } catch {
+      // Not a known region code: fall through and show it as typed.
+    }
+    return code;
+  }
+  return value.length > 100 ? value.slice(0, 100).trimEnd() : value;
+}
+
+/** Who runs the site: the "controller" named in the privacy policy and terms. */
+export interface OperatorInfo {
+  /** Legal name, or "the operator of Package Radar" when unset. */
+  name: string;
+  /** False when NEXT_PUBLIC_OPERATOR_NAME is unset and `name` is the generic fallback. */
+  nameIsSet: boolean;
+  /** Postal address on one line, or null when unset. */
+  address: string | null;
+  /** Country of establishment as an English name (or free text), or null. */
+  country: string | null;
+  /** EU representative (GDPR Art. 27): name and contact details, free text. */
+  euRepresentative: string | null;
+  /** UK representative (UK GDPR Art. 27): name and contact details, free text. */
+  ukRepresentative: string | null;
+  /** Address for privacy requests; defaults to the contact email. */
+  privacyEmail: string;
+}
+
+export interface OperatorEnv {
+  name?: string;
+  address?: string;
+  country?: string;
+  euRepresentative?: string;
+  ukRepresentative?: string;
+  privacyEmail?: string;
+}
+
+/** Operator identity from raw env values (pure; see OPERATOR for the configured one). */
+export function parseOperator(env: OperatorEnv, contactEmail: string): OperatorInfo {
+  const name = parseOptionalText(env.name);
+  return {
+    name: name ?? DEFAULT_OPERATOR_NAME,
+    nameIsSet: name !== null,
+    address: parseOptionalText(env.address),
+    country: parseOperatorCountry(env.country),
+    euRepresentative: parseOptionalText(env.euRepresentative),
+    ukRepresentative: parseOptionalText(env.ukRepresentative),
+    privacyEmail: normalizeContactEmail(env.privacyEmail, contactEmail),
+  };
+}
+
+/**
+ * Operator settings that should be filled in before launch but are not, by
+ * env var name. The legal pages list them in development builds only.
+ */
+export function missingOperatorSettings(operator: OperatorInfo): string[] {
+  const missing: string[] = [];
+  if (!operator.nameIsSet) missing.push("NEXT_PUBLIC_OPERATOR_NAME");
+  if (!operator.address) missing.push("NEXT_PUBLIC_OPERATOR_ADDRESS");
+  if (!operator.country) missing.push("NEXT_PUBLIC_OPERATOR_COUNTRY");
+  return missing;
 }
 
 /** `ca-pub-` followed by 10–20 digits, else null (treated as "AdSense not configured"). */
@@ -71,6 +165,29 @@ export const SITE_URL = normalizeSiteUrl(process.env.NEXT_PUBLIC_SITE_URL);
 export const CONTACT_EMAIL = normalizeContactEmail(
   process.env.NEXT_PUBLIC_CONTACT_EMAIL,
 );
+
+/** Who runs the site, from the NEXT_PUBLIC_OPERATOR_* / *_REPRESENTATIVE / PRIVACY_EMAIL vars. */
+export const OPERATOR: OperatorInfo = parseOperator(
+  {
+    name: process.env.NEXT_PUBLIC_OPERATOR_NAME,
+    address: process.env.NEXT_PUBLIC_OPERATOR_ADDRESS,
+    country: process.env.NEXT_PUBLIC_OPERATOR_COUNTRY,
+    euRepresentative: process.env.NEXT_PUBLIC_EU_REPRESENTATIVE,
+    ukRepresentative: process.env.NEXT_PUBLIC_UK_REPRESENTATIVE,
+    privacyEmail: process.env.NEXT_PUBLIC_PRIVACY_EMAIL,
+  },
+  CONTACT_EMAIL,
+);
+
+/** Address for privacy requests (NEXT_PUBLIC_PRIVACY_EMAIL, else the contact email). */
+export const PRIVACY_EMAIL = OPERATOR.privacyEmail;
+
+/**
+ * Development builds show clearly marked "set this env var" notes on the
+ * legal pages where operator details are missing; production builds show
+ * only what is configured.
+ */
+export const showOperatorPlaceholders = process.env.NODE_ENV === "development";
 
 /** AdSense client id ("ca-pub-…") or null when AdSense is not configured. */
 export const ADSENSE_CLIENT = parseAdsenseClient(

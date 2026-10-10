@@ -14,10 +14,12 @@ export interface ShipmentRows {
 /**
  * Finds the stored row an update belongs to:
  * 1. the row with the update's own key ("tn:..." or "order:...");
- * 2. for an update with a tracking number AND an order ref (Amazon "Shipped"
- *    email): the order's tracking-less row, first by order key, else the one
- *    tracking-less row with that order ref (the earlier email may have named
- *    another carrier). That row is then re-keyed to the tracking number;
+ * 2. for an update with a tracking number AND an order ref (an Amazon
+ *    "Shipped" email, or a FedEx/UPS email whose reference is the order
+ *    number): the order's tracking-less row, first by its carrier-agnostic
+ *    order key, else the one tracking-less row with that order ref (a row
+ *    still under a pre-v2 "order:<carrier>:<ref>" key). That row is then
+ *    re-keyed to the tracking number and takes the update's carrier;
  * 3. for an order-only update: the single row with that order ref, even when
  *    it was already re-keyed to a tracking number. With several candidates
  *    (a split order) nothing matches and a new order row is created.
