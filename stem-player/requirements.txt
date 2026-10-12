@@ -1,0 +1,12 @@
+# Stem Player runtime dependencies (installed by "Start Stem Player.bat").
+# PyTorch comes in via demucs (CPU build from PyPI); "Install GPU support.bat" swaps in
+# the NVIDIA CUDA build.
+demucs==4.1.0
+fastapi>=0.115.6
+starlette>=0.41.3
+uvicorn>=0.30
+python-multipart>=0.0.18
+numpy>=1.26
+soundfile>=0.12.1
+imageio-ffmpeg>=0.5.1
+lameenc>=1.7

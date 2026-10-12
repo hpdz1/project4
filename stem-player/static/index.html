@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Stem Player</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23111318'/%3E%3Crect x='6' y='12' width='3' height='8' rx='1.5' fill='%23ff5fa2'/%3E%3Crect x='11' y='7' width='3' height='18' rx='1.5' fill='%23ff9f43'/%3E%3Crect x='16' y='10' width='3' height='12' rx='1.5' fill='%234da3ff'/%3E%3Crect x='21' y='5' width='3' height='22' rx='1.5' fill='%233ddc84'/%3E%3Crect x='26' y='13' width='1' height='6' rx='.5' fill='%23a77bff'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="styles.css">
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#app">Skip to content</a>
+
+  <div id="offline-banner" class="banner" role="alert" hidden>
+    <span class="banner-dot" aria-hidden="true"></span>
+    <span id="offline-text">Stem Player isn't running — start it with Start Stem Player.bat</span>
+    <button type="button" id="offline-retry" class="btn btn-small">Try again</button>
+  </div>
+
+  <main id="app" tabindex="-1">
+    <!-- Library ---------------------------------------------------------- -->
+    <section id="library-screen" class="screen" aria-labelledby="library-heading" hidden>
+      <header class="app-header">
+        <div class="brand">
+          <span class="brand-logo" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></span>
+          <h1 id="library-heading">Stem Player</h1>
+        </div>
+        <div class="header-pills" id="health-pills"></div>
+      </header>
+
+      <div class="upload-card">
+        <div id="dropzone" class="dropzone">
+          <span class="dropzone-icon" aria-hidden="true"></span>
+          <h2 class="dropzone-title">Drop a song here</h2>
+          <p class="dropzone-or">or</p>
+          <button type="button" id="choose-btn" class="btn btn-primary btn-large">Choose file…</button>
+          <input type="file" id="file-input" accept="audio/*,video/*,.mp3,.wav,.flac,.m4a,.aac,.ogg,.oga,.opus,.wma,.aif,.aiff,.mka,.mp4,.m4v,.mov,.mkv,.webm,.avi,.wmv" multiple hidden>
+          <p class="dropzone-hint">MP3, WAV, FLAC, M4A, OGG, WMA or a video file — up to 500 MB and 30 minutes.<br>Everything stays on this PC.</p>
+        </div>
+
+        <div class="options">
+          <div class="field">
+            <label for="model-select">Split into</label>
+            <select id="model-select"></select>
+            <p id="model-note" class="field-note"></p>
+          </div>
+          <div class="field">
+            <label for="quality-select">Quality</label>
+            <select id="quality-select">
+              <option value="normal">Normal</option>
+              <option value="high">High (2× slower)</option>
+            </select>
+          </div>
+          <p id="device-note" class="field-note"></p>
+        </div>
+      </div>
+
+      <ul id="upload-list" class="upload-list" aria-label="Uploads"></ul>
+
+      <div class="list-header">
+        <h2>Your songs</h2>
+        <span id="song-count" class="muted"></span>
+      </div>
+      <ul id="song-list" class="song-list" aria-label="Your songs"></ul>
+      <div id="library-empty" class="library-empty" hidden>
+        <p class="library-empty-title">No songs yet</p>
+        <p class="muted">Drop a song above. The first one takes a little longer while the separation model downloads.</p>
+      </div>
+      <div id="library-loading" class="library-empty" hidden>
+        <p class="muted">Loading your songs…</p>
+      </div>
+    </section>
+
+    <!-- Player (filled by playerview.js) ---------------------------------- -->
+    <section id="player-screen" class="screen" aria-label="Player" hidden></section>
+  </main>
+
+  <div id="drop-overlay" class="drop-overlay" hidden>
+    <div class="drop-overlay-inner">
+      <span class="dropzone-icon" aria-hidden="true"></span>
+      <p class="drop-overlay-title">Drop to split into parts</p>
+      <p class="drop-overlay-sub">Audio or video files, up to 500 MB</p>
+    </div>
+  </div>
+
+  <div id="toasts" class="toasts" role="status" aria-live="polite"></div>
+
+  <dialog id="confirm-dialog" class="dialog" aria-labelledby="confirm-title" aria-describedby="confirm-message">
+    <form method="dialog" class="dialog-body">
+      <h2 id="confirm-title" class="dialog-title"></h2>
+      <p id="confirm-message" class="dialog-text"></p>
+      <div class="dialog-actions">
+        <button type="submit" value="cancel" class="btn btn-ghost" id="confirm-cancel">Cancel</button>
+        <button type="submit" value="ok" class="btn btn-danger" id="confirm-ok">OK</button>
+      </div>
+    </form>
+  </dialog>
+
+  <noscript><p class="noscript">Stem Player needs JavaScript turned on in your browser.</p></noscript>
+</body>
+</html>

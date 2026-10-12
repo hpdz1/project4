@@ -1,0 +1,6 @@
+# Test tools. The tests use the fake separator, so torch/demucs are not needed:
+#   pip install fastapi uvicorn python-multipart numpy soundfile imageio-ffmpeg lameenc
+#   pip install -r requirements-dev.txt
+#   python -m pytest tests -q
+pytest>=8.0
+httpx>=0.27

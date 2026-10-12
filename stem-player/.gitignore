@@ -1,0 +1,9 @@
+# Python environment created by "Start Stem Player.bat"
+.venv/
+# Your songs and their parts
+library/
+# Downloaded AI model files
+models/
+__pycache__/
+*.pyc
+.pytest_cache/
